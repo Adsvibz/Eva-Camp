@@ -9,7 +9,7 @@
     "build": "electron-vite build",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "dist:win": "npm run build && electron-builder --win nsis portable"
+    "dist:win": "npm run build && electron-builder --win nsis portable --publish never"
   },
   "dependencies": {
     "better-sqlite3": "^11.10.0",
