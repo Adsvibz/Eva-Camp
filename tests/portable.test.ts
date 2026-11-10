@@ -1,0 +1,30 @@
+import {it,expect} from 'vitest'
+import Database from 'better-sqlite3'
+import {mkdtempSync,readFileSync,rmSync,existsSync} from 'node:fs'
+import {tmpdir} from 'node:os'
+import {join} from 'node:path'
+import {CampRepository} from '../src/main/repository'
+import {createPortableArchive,stagePortableRestore} from '../src/main/portable'
+const schema=readFileSync(join(process.cwd(),'db/migrations/0001_initial.sql'),'utf8')
+const enc=(prefix:string)=>(s:string)=>Buffer.from(prefix+Buffer.from(s).toString('base64'))
+const dec=(prefix:string)=>(b:Buffer)=>{const s=b.toString();if(!s.startsWith(prefix))throw new Error('Wrong machine');return Buffer.from(s.slice(prefix.length),'base64').toString()}
+it('exports and imports current and historical identities onto a different machine',()=>{
+ const db=new Database(':memory:');db.exec(schema);const source=new CampRepository(db,enc('device-A:'),dec('device-A:'));const u=source.createUnit({name:'A',type:'room',capacity:2,pricePiasters:0});const b=source.createBooking({fullName:'Guest',phone:'',unitId:u,arrival:'2026-11-01',departure:'2026-11-02',adults:1,children:0,totalPiasters:0,source:'phone',idNumber:'SECRET-OLD-7842',companions:[{fullName:'Sara',idNumber:'SECRET-COMP-7842'}]});const auditId=source.replaceIdentity({kind:'primary',bookingId:b.id,idNumber:'SECRET-NEW-7842'})
+ const dir=mkdtempSync(join(tmpdir(),'eva-portable-'));const pending=join(dir,'pending.sqlite')
+ try{const archive=createPortableArchive(db,'Long-password-2026',dec('device-A:'));expect(archive.includes(Buffer.from('SECRET-NEW-7842'))).toBe(false);expect(source.registrationData(b.id).idNumber).toBe('SECRET-NEW-7842');stagePortableRestore(archive,'Long-password-2026',pending,enc('device-B:'),dec('device-B:'));const bytes=readFileSync(pending);expect(bytes.includes(Buffer.from('SECRET-NEW-7842'))).toBe(false);expect(bytes.includes(Buffer.from('SECRET-OLD-7842'))).toBe(false);const restoredDb=new Database(pending);const restored=new CampRepository(restoredDb,enc('device-B:'),dec('device-B:'));expect(restored.registrationData(b.id)).toMatchObject({idNumber:'SECRET-NEW-7842',companions:[{fullName:'Sara',idNumber:'SECRET-COMP-7842'}]});restored.undoIdentity(auditId);expect(restored.registrationData(b.id).idNumber).toBe('SECRET-OLD-7842');restoredDb.close()}finally{db.close();rmSync(dir,{recursive:true,force:true})}
+})
+it('rejects a wrong password and tampering without leaving a staged database',()=>{
+ const db=new Database(':memory:');db.exec(schema);const dir=mkdtempSync(join(tmpdir(),'eva-portable-'));const pending=join(dir,'pending.sqlite')
+ try{const archive=createPortableArchive(db,'Long-password-2026',dec('A:'));expect(()=>stagePortableRestore(archive,'Wrong-password-123',pending,enc('B:'),dec('B:'))).toThrow();expect(existsSync(pending)).toBe(false);archive[archive.length-20]^=1;expect(()=>stagePortableRestore(archive,'Long-password-2026',pending,enc('B:'),dec('B:'))).toThrow();expect(existsSync(pending)).toBe(false)}finally{db.close();rmSync(dir,{recursive:true,force:true})}
+})
+it('refuses weak passwords and failed identity decryption without creating an archive',()=>{
+ const db=new Database(':memory:');db.exec(schema);db.prepare('INSERT INTO guests(full_name,id_passport_ciphertext) VALUES (?,?)').run('Guest',enc('A:')('SECRET'));try{expect(()=>createPortableArchive(db,'short',dec('A:'))).toThrow();expect(()=>createPortableArchive(db,'Long-password-2026',dec('wrong:'))).toThrow()}finally{db.close()}
+})
+it('never overwrites an existing pending restore and rejects failed re-encryption',()=>{
+ const db=new Database(':memory:');db.exec(schema);db.prepare('INSERT INTO guests(full_name,id_passport_ciphertext) VALUES (?,?)').run('Guest',enc('A:')('SECRET'));const dir=mkdtempSync(join(tmpdir(),'eva-portable-')),pending=join(dir,'pending.sqlite')
+ try{const archive=createPortableArchive(db,'Long-password-2026',dec('A:'));expect(()=>stagePortableRestore(archive,'Long-password-2026',pending,enc('B:'),dec('wrong:'))).toThrow();expect(existsSync(pending)).toBe(false);stagePortableRestore(archive,'Long-password-2026',pending,enc('B:'),dec('B:'));const first=readFileSync(pending);expect(()=>stagePortableRestore(archive,'Long-password-2026',pending,enc('B:'),dec('B:'))).toThrow();expect(readFileSync(pending)).toEqual(first)}finally{db.close();rmSync(dir,{recursive:true,force:true})}
+})
+it('cleans up without staging when local identity encryption fails midway',()=>{
+ const db=new Database(':memory:');db.exec(schema);db.prepare('INSERT INTO guests(full_name,id_passport_ciphertext) VALUES (?,?)').run('First',enc('A:')('SECRET1'));db.prepare('INSERT INTO guests(full_name,id_passport_ciphertext) VALUES (?,?)').run('Second',enc('A:')('SECRET2'));const dir=mkdtempSync(join(tmpdir(),'eva-fail-')),pending=join(dir,'pending.sqlite')
+ try{const archive=createPortableArchive(db,'Long-password-2026',dec('A:'));let count=0;const unstable=(s:string)=>{if(++count>1)throw new Error('Key unavailable');return enc('B:')(s)};expect(()=>stagePortableRestore(archive,'Long-password-2026',pending,unstable,dec('B:'))).toThrow();expect(existsSync(pending)).toBe(false)}finally{db.close();rmSync(dir,{recursive:true,force:true})}
+})

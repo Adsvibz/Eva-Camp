@@ -1,0 +1,7 @@
+node_modules/
+dist/
+release/
+*.sqlite*
+__pycache__/
+.env
+out/
