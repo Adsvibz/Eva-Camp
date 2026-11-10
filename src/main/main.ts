@@ -9,7 +9,7 @@ import { managementReportHtml, reportCsv } from './reports'
 import { createVerifiedBackup, createManualBackup } from './backup'
 import { stageRestore, applyStagedRestore } from './restore'
 import { createPortableArchive, stagePortableRestore } from './portable'
-import { bookingSchema, paymentSchema, unitSchema, statusSchema, date, calendarRangeSchema, rescheduleSchema, searchSchema, bookingDetailsSchema, reportRangeSchema, replaceIdentitySchema, addCompanionSchema, updateCompanionSchema, companionRefSchema, portablePasswordSchema } from '../shared/contracts'
+import { bookingSchema, paymentSchema, unitSchema, statusSchema, date, calendarRangeSchema, rescheduleSchema, searchSchema, bookingDetailsSchema, reportRangeSchema, replaceIdentitySchema, addCompanionSchema, updateCompanionSchema, companionRefSchema, portablePasswordSchema, transferSchema } from '../shared/contracts'
 
 protocol.registerSchemesAsPrivileged([{scheme:'evaprint',privileges:{standard:true,secure:true}}])
 const printPages=new Map<string,string>()
@@ -26,8 +26,9 @@ app.whenReady().then(()=>{
   const result=db.pragma('quick_check',{simple:true}); if(result!=='ok') throw new Error('Database integrity check failed')
   const schema=db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations'").get()
   if(!schema) db.exec(readFileSync(join(app.getAppPath(),'db/migrations/0001_initial.sql'),'utf8'))
-  const version=(db.prepare('SELECT MAX(version) AS version FROM schema_migrations').get() as {version:number}).version
-  if(version!==1) throw new Error(`Unsupported database schema: ${version}`)
+  let version=(db.prepare('SELECT MAX(version) AS version FROM schema_migrations').get() as {version:number}).version
+  if(version===1){db.exec(readFileSync(join(app.getAppPath(),'db/migrations/0002_unit_segments.sql'),'utf8'));version=2}
+  if(version!==2) throw new Error(`Unsupported database schema: ${version}`)
   let restoring=false
   let backupPending:Promise<unknown>=Promise.resolve()
   const backup=()=>{backupPending=track(backupPending.then(()=>createVerifiedBackup(db,join(dataDir,'backups'))).catch(error=>dialog.showErrorBox('Backup failed / تعذر النسخ الاحتياطي',String(error))));return backupPending}
@@ -98,6 +99,8 @@ app.whenReady().then(()=>{
   ipcMain.handle('companions:restore',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');const d=companionRefSchema.parse(raw);repository.restoreCompanion(d.bookingId,d.companionId)})
   ipcMain.handle('bookings:update-details',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');repository.updateBookingDetails(bookingDetailsSchema.parse(raw))})
   ipcMain.handle('bookings:search',(_event,query:unknown)=>repository.searchBookings(searchSchema.parse(query)))
+  ipcMain.handle('units:history',(_event,id:unknown)=>repository.unitHistory(statusSchema.shape.bookingId.parse(id)))
+  ipcMain.handle('units:transfer',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');repository.transferUnit(transferSchema.parse(raw))})
   ipcMain.handle('calendar:list',(_event,raw:unknown)=>{const range=calendarRangeSchema.parse(raw);return repository.calendar(range.start,range.end)})
   ipcMain.handle('calendar:reschedule',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');repository.reschedule(rescheduleSchema.parse(raw))})
   ipcMain.handle('bookings:list',()=>repository.listBookings())

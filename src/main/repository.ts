@@ -1,6 +1,6 @@
 import type Database from 'better-sqlite3'
 import type {RegistrationData,ReceiptData} from './print'
-import { unitSchema,bookingSchema,paymentSchema,date,calendarRangeSchema,rescheduleSchema,searchSchema,bookingDetailsSchema,reportRangeSchema,replaceIdentitySchema,addCompanionSchema,updateCompanionSchema,companionRefSchema, type UnitInput,type BookingInput,type PaymentInput,type BookingRow,type UnitRow,type BookingDetail,type DailyReport,type CalendarBooking,type RescheduleInput,type BookingDetailsInput,type ManagementReport,type ReplaceIdentityInput,type AddCompanionInput,type UpdateCompanionInput } from '../shared/contracts'
+import { unitSchema,bookingSchema,paymentSchema,date,calendarRangeSchema,rescheduleSchema,searchSchema,bookingDetailsSchema,reportRangeSchema,transferSchema,replaceIdentitySchema,addCompanionSchema,updateCompanionSchema,companionRefSchema, type UnitInput,type BookingInput,type PaymentInput,type BookingRow,type UnitRow,type BookingDetail,type DailyReport,type CalendarBooking,type RescheduleInput,type BookingDetailsInput,type ManagementReport,type ReplaceIdentityInput,type AddCompanionInput,type UpdateCompanionInput,type TransferInput,type UnitSegment } from '../shared/contracts'
 
 export class CampRepository {
  constructor(private db: Database.Database, private encrypt?: (value:string)=>Buffer, private decrypt?: (value:Buffer)=>string) { db.pragma('foreign_keys = ON') }
@@ -41,7 +41,7 @@ export class CampRepository {
   return {...rest,idNumber:unseal(idCipher),companions:others.map(g=>({fullName:g.fullName,idNumber:unseal(g.idCipher)}))}
  }
  getBooking(id:number):BookingDetail|null {
-  const row=this.db.prepare(`SELECT b.id,b.booking_reference AS reference,g.full_name AS fullName,g.nationality,g.email,g.date_of_birth AS dateOfBirth,g.country,g.home_address AS address,g.notes,(g.id_passport_ciphertext IS NOT NULL) AS hasPrimaryId,COALESCE(g.mobile_whatsapp,'') AS phone,b.adults_count AS adults,b.children_count AS children,b.source,u.name AS unitName,b.arrival_date AS arrival,b.departure_date AS departure,b.status,v.total_piasters AS totalPiasters,v.paid_piasters AS paidPiasters,v.balance_piasters AS balancePiasters FROM bookings b JOIN guests g ON g.id=b.guest_id JOIN units u ON u.id=b.unit_id JOIN booking_balances v ON v.booking_id=b.id WHERE b.id=? AND b.deleted_at IS NULL`).get(id) as Omit<BookingDetail,'companions'>|undefined
+  const row=this.db.prepare(`SELECT b.id,b.unit_id AS unitId,b.booking_reference AS reference,g.full_name AS fullName,g.nationality,g.email,g.date_of_birth AS dateOfBirth,g.country,g.home_address AS address,g.notes,(g.id_passport_ciphertext IS NOT NULL) AS hasPrimaryId,COALESCE(g.mobile_whatsapp,'') AS phone,b.adults_count AS adults,b.children_count AS children,b.source,u.name AS unitName,b.arrival_date AS arrival,b.departure_date AS departure,b.status,v.total_piasters AS totalPiasters,v.paid_piasters AS paidPiasters,v.balance_piasters AS balancePiasters FROM bookings b JOIN guests g ON g.id=b.guest_id JOIN units u ON u.id=b.unit_id JOIN booking_balances v ON v.booking_id=b.id WHERE b.id=? AND b.deleted_at IS NULL`).get(id) as Omit<BookingDetail,'companions'>|undefined
   if(!row)return null
   const companions=this.db.prepare('SELECT id,full_name AS fullName,(id_passport_ciphertext IS NOT NULL) AS hasId FROM additional_guests WHERE booking_id=? AND deleted_at IS NULL ORDER BY id').all(id) as {id:number;fullName:string;hasId:boolean}[]
   return {...row,companions}
@@ -127,7 +127,29 @@ export class CampRepository {
  }
  calendar(start:string,end:string):CalendarBooking[]{
   calendarRangeSchema.parse({start,end})
-  return this.db.prepare(`SELECT b.id,b.booking_reference AS reference,b.unit_id AS unitId,g.full_name AS fullName,b.arrival_date AS arrival,b.departure_date AS departure,b.status FROM bookings b JOIN guests g ON g.id=b.guest_id WHERE b.deleted_at IS NULL AND b.status IN ('reserved','checked-in') AND b.arrival_date<? AND b.departure_date>? ORDER BY b.unit_id,b.arrival_date,b.id`).all(end,start) as CalendarBooking[]
+  return this.db.prepare(`SELECT b.id,b.booking_reference AS reference,s.unit_id AS unitId,g.full_name AS fullName,s.start_date AS arrival,s.end_date AS departure,b.arrival_date AS bookingArrival,b.departure_date AS bookingDeparture,b.unit_id AS bookingUnitId,b.status FROM booking_unit_segments s JOIN bookings b ON b.id=s.booking_id JOIN guests g ON g.id=b.guest_id WHERE b.deleted_at IS NULL AND b.status IN ('reserved','checked-in') AND s.start_date<? AND s.end_date>? ORDER BY s.unit_id,s.start_date,b.id`).all(end,start) as CalendarBooking[]
+ }
+
+
+ unitHistory(bookingId:number):UnitSegment[]{
+  if(!Number.isSafeInteger(bookingId)||bookingId<=0)throw new Error('Invalid booking')
+  return this.db.prepare(`SELECT s.unit_id AS unitId,u.name AS unitName,s.start_date AS start,s.end_date AS end FROM booking_unit_segments s JOIN units u ON u.id=s.unit_id JOIN bookings b ON b.id=s.booking_id WHERE s.booking_id=? AND b.deleted_at IS NULL ORDER BY s.start_date,s.id`).all(bookingId) as UnitSegment[]
+ }
+ transferUnit(input:TransferInput):void{
+  const d=transferSchema.parse(input)
+  this.db.transaction(()=>{
+   const booking=this.db.prepare("SELECT unit_id AS unitId,departure_date AS departure,adults_count+children_count AS guests FROM bookings WHERE id=? AND deleted_at IS NULL AND status='checked-in'").get(d.bookingId) as {unitId:number;departure:string;guests:number}|undefined
+   if(!booking)throw new Error('Booking must be checked in')
+   if(booking.unitId===d.unitId)throw new Error('Choose a different unit')
+   const unit=this.db.prepare("SELECT capacity FROM units WHERE id=? AND deleted_at IS NULL AND housekeeping_status='available'").get(d.unitId) as {capacity:number}|undefined
+   if(!unit)throw new Error('Unit unavailable');if(booking.guests>unit.capacity)throw new Error('Unit capacity exceeded')
+   const segment=this.db.prepare('SELECT id,unit_id AS unitId,start_date AS start,end_date AS end FROM booking_unit_segments WHERE booking_id=? ORDER BY start_date DESC,id DESC LIMIT 1').get(d.bookingId) as {id:number;unitId:number;start:string;end:string}|undefined
+   if(!segment||segment.unitId!==booking.unitId||segment.end!==booking.departure||d.date<segment.start||d.date>=segment.end)throw new Error('Transfer date must be within the current stay')
+   if(d.date===segment.start)this.db.prepare('UPDATE booking_unit_segments SET unit_id=? WHERE id=?').run(d.unitId,segment.id)
+   else{this.db.prepare('UPDATE booking_unit_segments SET end_date=? WHERE id=?').run(d.date,segment.id);this.db.prepare('INSERT INTO booking_unit_segments(booking_id,unit_id,start_date,end_date) VALUES (?,?,?,?)').run(d.bookingId,d.unitId,d.date,segment.end)}
+   this.db.prepare('UPDATE bookings SET unit_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(d.unitId,d.bookingId)
+   this.db.prepare('INSERT INTO audit_log(actor,action,entity_type,entity_id,detail_json) VALUES (?,?,?,?,?)').run('operator','transfer','booking',String(d.bookingId),JSON.stringify({fromUnitId:booking.unitId,toUnitId:d.unitId,date:d.date}))
+  })()
  }
  reschedule(input:RescheduleInput):void{
   const d=rescheduleSchema.parse(input)
@@ -147,7 +169,7 @@ export class CampRepository {
   reportRangeSchema.parse({start,end})
   const b=this.db.prepare(`SELECT COUNT(*) AS bookingCount,COALESCE(SUM(v.total_piasters-v.discount_piasters+v.extras_piasters),0) AS bookingValuePiasters,COALESCE(SUM(CASE WHEN v.balance_piasters>0 THEN v.balance_piasters ELSE 0 END),0) AS outstandingPiasters FROM bookings b JOIN booking_balances v ON v.booking_id=b.id WHERE b.deleted_at IS NULL AND b.status<>'cancelled' AND b.arrival_date>=? AND b.arrival_date<=?`).get(start,end) as {bookingCount:number;bookingValuePiasters:number;outstandingPiasters:number}
   const p=this.db.prepare(`SELECT COALESCE(SUM(amount_piasters),0) AS collectionsPiasters,COALESCE(SUM(CASE WHEN amount_piasters<0 THEN -amount_piasters ELSE 0 END),0) AS refundsPiasters FROM payments WHERE deleted_at IS NULL AND payment_date>=? AND payment_date<=?`).get(start,end) as {collectionsPiasters:number;refundsPiasters:number}
-  const n=this.db.prepare(`SELECT COALESCE(SUM(CAST(julianday(MIN(b.departure_date,date(?,'+1 day')))-julianday(MAX(b.arrival_date,?)) AS INTEGER)),0) AS scheduledNights FROM bookings b JOIN units u ON u.id=b.unit_id AND u.deleted_at IS NULL WHERE b.deleted_at IS NULL AND b.status IN ('reserved','checked-in','checked-out') AND b.arrival_date<date(?,'+1 day') AND b.departure_date>?`).get(end,start,end,start) as {scheduledNights:number}
+  const n=this.db.prepare(`SELECT COALESCE(SUM(CAST(julianday(MIN(seg.end_date,date(?,'+1 day')))-julianday(MAX(seg.start_date,?)) AS INTEGER)),0) AS scheduledNights FROM booking_unit_segments seg JOIN bookings b ON b.id=seg.booking_id JOIN units u ON u.id=seg.unit_id AND u.deleted_at IS NULL WHERE b.deleted_at IS NULL AND b.status IN ('reserved','checked-in','checked-out') AND seg.start_date<date(?,'+1 day') AND seg.end_date>?`).get(end,start,end,start) as {scheduledNights:number}
   const available=this.db.prepare(`SELECT (SELECT COUNT(*) FROM units WHERE deleted_at IS NULL)*CAST(julianday(date(?,'+1 day'))-julianday(?) AS INTEGER) AS availableNights`).get(end,start) as {availableNights:number}
   const nationalities=this.db.prepare(`SELECT COALESCE(NULLIF(TRIM(g.nationality),''),'—') AS nationality,COUNT(*) AS stays FROM bookings b JOIN guests g ON g.id=b.guest_id WHERE b.deleted_at IS NULL AND b.status<>'cancelled' AND b.arrival_date>=? AND b.arrival_date<=? GROUP BY 1 ORDER BY stays DESC,nationality ASC`).all(start,end) as {nationality:string;stays:number}[]
   return {start,end,...b,...p,...n,...available,nationalities}

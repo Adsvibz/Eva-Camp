@@ -8,7 +8,9 @@ SQLite connections must enable foreign_keys, WAL and a busy timeout. A migration
 ```mermaid
 erDiagram
  GUESTS ||--o{ BOOKINGS : books
- UNITS ||--o{ BOOKINGS : assigned
+ UNITS ||--o{ BOOKINGS : current_unit
+ BOOKINGS ||--|{ BOOKING_UNIT_SEGMENTS : stays
+ UNITS ||--o{ BOOKING_UNIT_SEGMENTS : hosts
  UNITS ||--o{ SEASONAL_RATES : priced
  BOOKINGS ||--o{ ADDITIONAL_GUESTS : includes
  BOOKINGS ||--o| DECLARATIONS : signs
@@ -36,3 +38,7 @@ The attached image is a reference for header, wordmark, bilingual labels, sectio
 - Today and monthly revenue must be defined separately from receipts, refunds and accrual; avoid silently conflating them.
 - Capacity, date validity for all date-bearing tables, preventing use of deleted/maintenance units, seasonal-rate overlap, invoice snapshots, deletion/undo semantics and atomic auditing still require domain implementation and tests.
 - The schema is a starting point, not a complete implementation, and must be reconciled with the eventual Drizzle schema before production.
+
+## Schema 2: checked-in transfers
+
+`booking_unit_segments` stores half-open `[start_date, end_date)` room intervals. `bookings.unit_id` is the latest assigned unit. A transfer shortens the previous interval, inserts its successor, updates the current unit and writes an audit entry in one transaction. Same-day changes update the latest interval and retain the change in the audit log. SQL triggers enforce active-stay conflicts, including reactivation after cancellation; extending a checked-in stay changes only its last segment. Calendar and scheduled-night queries use segments to avoid rewriting earlier room assignments. Existing bookings are backfilled atomically during migration 2. Restored schema-1 databases follow the same upgrade path.

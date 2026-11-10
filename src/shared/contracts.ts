@@ -10,12 +10,12 @@ export type BookingRow = {id:number;reference:string;fullName:string;unitName:st
 export type UnitRow = {id:number;name:string;type:string;capacity:number;pricePiasters:number}
 
 export const statusSchema = z.object({bookingId:z.number().int().positive(),status:z.enum(['reserved','checked-in','checked-out','cancelled'])})
-export type BookingDetail = BookingRow & {nationality:string|null;email:string|null;dateOfBirth:string|null;country:string|null;address:string|null;notes:string|null;phone:string;adults:number;children:number;source:'walk-in'|'phone'|'whatsapp'|'agency';hasPrimaryId:boolean;companions:{id:number;fullName:string;hasId:boolean}[]}
+export type BookingDetail = BookingRow & {unitId:number;nationality:string|null;email:string|null;dateOfBirth:string|null;country:string|null;address:string|null;notes:string|null;phone:string;adults:number;children:number;source:'walk-in'|'phone'|'whatsapp'|'agency';hasPrimaryId:boolean;companions:{id:number;fullName:string;hasId:boolean}[]}
 
 export type DailyReport = {date:string;cash:number;card:number;transfer:number;gross:number;refunds:number;net:number;count:number;closed:boolean}
 export const calendarRangeSchema=z.object({start:date,end:date}).refine(v=>v.start<v.end&&new Date(v.end).valueOf()-new Date(v.start).valueOf()<=62*86400000,{message:'Invalid calendar range'})
 export const rescheduleSchema=z.object({bookingId:z.number().int().positive(),unitId:z.number().int().positive(),arrival:date,departure:date}).refine(v=>v.arrival<v.departure,{message:'Departure must be after arrival'})
-export type CalendarBooking={id:number;reference:string;unitId:number;fullName:string;arrival:string;departure:string;status:'reserved'|'checked-in'}
+export type CalendarBooking={id:number;reference:string;unitId:number;fullName:string;arrival:string;departure:string;bookingArrival:string;bookingDeparture:string;bookingUnitId:number;status:'reserved'|'checked-in'}
 export type RescheduleInput=z.infer<typeof rescheduleSchema>
 
 export const searchSchema=z.string().trim().max(200)
@@ -33,3 +33,6 @@ export type AddCompanionInput=z.infer<typeof addCompanionSchema>
 export type UpdateCompanionInput=z.infer<typeof updateCompanionSchema>
 export type CompanionRef=z.infer<typeof companionRefSchema>
 export const portablePasswordSchema=z.string().min(12).max(256)
+export const transferSchema=z.object({bookingId:z.number().int().positive(),unitId:z.number().int().positive(),date})
+export type TransferInput=z.infer<typeof transferSchema>
+export type UnitSegment={unitId:number;unitName:string;start:string;end:string}

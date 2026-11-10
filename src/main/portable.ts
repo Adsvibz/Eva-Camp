@@ -8,7 +8,7 @@ function verify(db:Database.Database){
  if(db.pragma('integrity_check',{simple:true})!=='ok')throw new Error('Database integrity check failed')
  if((db.pragma('foreign_key_check') as unknown[]).length)throw new Error('Database foreign keys are invalid')
  const version=db.prepare('SELECT MAX(version) AS version FROM schema_migrations').get() as {version:number}
- if(version.version!==1)throw new Error('Unsupported database version')
+ if(![1,2].includes(version.version))throw new Error('Unsupported database version')
 }
 function convertIdentities(db:Database.Database,convert:(value:Buffer)=>Buffer){
  for(const table of ['guests','additional_guests'] as const){
