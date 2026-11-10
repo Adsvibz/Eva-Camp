@@ -5,3 +5,4 @@ release/
 __pycache__/
 .env
 out/
+test-results/

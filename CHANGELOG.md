@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Add returning-guest selection, indexed phone normalization, explicit shared-phone acknowledgement and paginated guest stay history.
+- Add schema 3 upgrades and restore compatibility for schemas 1–3.
+- Add a Playwright suite exercising the real Electron application and Chromium PDF rendering on Windows; executables are uploaded only after it passes.
+
+### Earlier development work
+
 - Add checked-in unit transfers with dated room history, transactional conflict and capacity checks, and immediate undo.
 - Keep earlier room assignments in the calendar and update only the final segment when extending a stay.
 - Upgrade schema-1 bookings to schema 2 automatically and preserve room segments through local and password-protected portable backups.

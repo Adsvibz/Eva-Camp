@@ -1,9 +1,15 @@
+import { GuestDirectory } from './guests'
+import { normalizePhone } from '../shared/phone'
+import type { GuestHistoryInput } from '../shared/contracts'
 import type Database from 'better-sqlite3'
 import type {RegistrationData,ReceiptData} from './print'
 import { unitSchema,bookingSchema,paymentSchema,date,calendarRangeSchema,rescheduleSchema,searchSchema,bookingDetailsSchema,reportRangeSchema,transferSchema,replaceIdentitySchema,addCompanionSchema,updateCompanionSchema,companionRefSchema, type UnitInput,type BookingInput,type PaymentInput,type BookingRow,type UnitRow,type BookingDetail,type DailyReport,type CalendarBooking,type RescheduleInput,type BookingDetailsInput,type ManagementReport,type ReplaceIdentityInput,type AddCompanionInput,type UpdateCompanionInput,type TransferInput,type UnitSegment } from '../shared/contracts'
 
 export class CampRepository {
  constructor(private db: Database.Database, private encrypt?: (value:string)=>Buffer, private decrypt?: (value:Buffer)=>string) { db.pragma('foreign_keys = ON') }
+ findGuests(query:string){return new GuestDirectory(this.db).find(query)}
+ duplicateGuests(phone:string){return new GuestDirectory(this.db).matchPhone(phone)}
+ guestHistory(input:GuestHistoryInput){return new GuestDirectory(this.db).history(input)}
  private audit(action:string,entity:string,id:number|string) { this.db.prepare('INSERT INTO audit_log(actor,action,entity_type,entity_id) VALUES (?,?,?,?)').run('operator',action,entity,String(id)) }
  private sequence(name:string,year:number):number {
   this.db.prepare('INSERT INTO sequences(name,year,value) VALUES (?,?,1) ON CONFLICT(name,year) DO UPDATE SET value=value+1').run(name,year)
@@ -16,7 +22,17 @@ export class CampRepository {
   if(!unit) throw new Error('Unit unavailable')
   if(d.adults+d.children>unit.capacity) throw new Error('Unit capacity exceeded')
   const protect=(value?:string)=>{if(!value)return null;if(!this.encrypt)throw new Error('Identity encryption unavailable');return this.encrypt(value)}
-  const guestId=Number(this.db.prepare('INSERT INTO guests(full_name,mobile_whatsapp,nationality,email,date_of_birth,country,home_address,notes,id_passport_ciphertext) VALUES (?,?,?,?,?,?,?,?,?)').run(d.fullName,d.phone,d.nationality||null,d.email||null,d.dateOfBirth||null,d.country||null,d.address||null,d.notes||null,protect(d.idNumber)).lastInsertRowid)
+  let guestId:number
+  if(d.guestId){
+   const guest=this.db.prepare('SELECT id FROM guests WHERE id=? AND deleted_at IS NULL').get(d.guestId) as {id:number}|undefined
+   if(!guest)throw new Error('Guest unavailable')
+   guestId=guest.id
+  }else{
+   const shared=this.duplicateGuests(d.phone).length>0
+   if(shared&&!d.allowSharedPhone)throw new Error('DUPLICATE_GUEST')
+   guestId=Number(this.db.prepare('INSERT INTO guests(full_name,mobile_whatsapp,normalized_phone,nationality,email,date_of_birth,country,home_address,notes,id_passport_ciphertext) VALUES (?,?,?,?,?,?,?,?,?,?)').run(d.fullName,d.phone,normalizePhone(d.phone),d.nationality||null,d.email||null,d.dateOfBirth||null,d.country||null,d.address||null,d.notes||null,protect(d.idNumber)).lastInsertRowid)
+   this.audit(shared?'create-shared-phone':'create','guest',guestId)
+  }
   const year=Number(d.arrival.slice(0,4)); const reference=`EVA-${year}-${String(this.sequence('booking',year)).padStart(4,'0')}`
   const id=Number(this.db.prepare("INSERT INTO bookings(booking_reference,guest_id,unit_id,arrival_date,departure_date,adults_count,children_count,total_piasters,status,source) VALUES (?,?,?,?,?,?,?,?,'reserved',?)").run(reference,guestId,d.unitId,d.arrival,d.departure,d.adults,d.children,d.totalPiasters,d.source).lastInsertRowid)
   for(const companion of d.companions||[]) this.db.prepare('INSERT INTO additional_guests(booking_id,full_name,id_passport_ciphertext) VALUES (?,?,?)').run(id,companion.fullName,protect(companion.idNumber))
@@ -41,7 +57,7 @@ export class CampRepository {
   return {...rest,idNumber:unseal(idCipher),companions:others.map(g=>({fullName:g.fullName,idNumber:unseal(g.idCipher)}))}
  }
  getBooking(id:number):BookingDetail|null {
-  const row=this.db.prepare(`SELECT b.id,b.unit_id AS unitId,b.booking_reference AS reference,g.full_name AS fullName,g.nationality,g.email,g.date_of_birth AS dateOfBirth,g.country,g.home_address AS address,g.notes,(g.id_passport_ciphertext IS NOT NULL) AS hasPrimaryId,COALESCE(g.mobile_whatsapp,'') AS phone,b.adults_count AS adults,b.children_count AS children,b.source,u.name AS unitName,b.arrival_date AS arrival,b.departure_date AS departure,b.status,v.total_piasters AS totalPiasters,v.paid_piasters AS paidPiasters,v.balance_piasters AS balancePiasters FROM bookings b JOIN guests g ON g.id=b.guest_id JOIN units u ON u.id=b.unit_id JOIN booking_balances v ON v.booking_id=b.id WHERE b.id=? AND b.deleted_at IS NULL`).get(id) as Omit<BookingDetail,'companions'>|undefined
+  const row=this.db.prepare(`SELECT b.id,b.guest_id AS guestId,b.unit_id AS unitId,b.booking_reference AS reference,g.full_name AS fullName,g.nationality,g.email,g.date_of_birth AS dateOfBirth,g.country,g.home_address AS address,g.notes,(g.id_passport_ciphertext IS NOT NULL) AS hasPrimaryId,COALESCE(g.mobile_whatsapp,'') AS phone,b.adults_count AS adults,b.children_count AS children,b.source,u.name AS unitName,b.arrival_date AS arrival,b.departure_date AS departure,b.status,v.total_piasters AS totalPiasters,v.paid_piasters AS paidPiasters,v.balance_piasters AS balancePiasters FROM bookings b JOIN guests g ON g.id=b.guest_id JOIN units u ON u.id=b.unit_id JOIN booking_balances v ON v.booking_id=b.id WHERE b.id=? AND b.deleted_at IS NULL`).get(id) as Omit<BookingDetail,'companions'>|undefined
   if(!row)return null
   const companions=this.db.prepare('SELECT id,full_name AS fullName,(id_passport_ciphertext IS NOT NULL) AS hasId FROM additional_guests WHERE booking_id=? AND deleted_at IS NULL ORDER BY id').all(id) as {id:number;fullName:string;hasId:boolean}[]
   return {...row,companions}
@@ -102,7 +118,7 @@ export class CampRepository {
    const beforeGuest=this.db.prepare("SELECT full_name AS fullName,COALESCE(mobile_whatsapp,'') AS phone,COALESCE(nationality,'') AS nationality,COALESCE(email,'') AS email,COALESCE(date_of_birth,'') AS dateOfBirth,COALESCE(country,'') AS country,COALESCE(home_address,'') AS address,COALESCE(notes,'') AS notes FROM guests WHERE id=?").get(row.guestId) as Record<string,string>
    const guestFields=['fullName','phone','nationality','email','dateOfBirth','country','address','notes'] as const
    const changedGuestFields=guestFields.filter(key=>beforeGuest[key] !== (d[key]||''))
-   this.db.prepare('UPDATE guests SET full_name=?,mobile_whatsapp=?,nationality=?,email=?,date_of_birth=?,country=?,home_address=?,notes=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(d.fullName,d.phone,d.nationality||null,d.email||null,d.dateOfBirth||null,d.country||null,d.address||null,d.notes||null,row.guestId)
+   this.db.prepare('UPDATE guests SET full_name=?,mobile_whatsapp=?,normalized_phone=?,nationality=?,email=?,date_of_birth=?,country=?,home_address=?,notes=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(d.fullName,d.phone,normalizePhone(d.phone),d.nationality||null,d.email||null,d.dateOfBirth||null,d.country||null,d.address||null,d.notes||null,row.guestId)
    this.db.prepare('UPDATE bookings SET adults_count=?,children_count=?,total_piasters=?,source=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(d.adults,d.children,d.totalPiasters,d.source,d.bookingId)
    const changes={changedGuestFields,before:{adults:row.adults,children:row.children,totalPiasters:row.totalPiasters,source:row.source},after:{adults:d.adults,children:d.children,totalPiasters:d.totalPiasters,source:d.source}}
    this.db.prepare('INSERT INTO audit_log(actor,action,entity_type,entity_id,detail_json) VALUES (?,?,?,?,?)').run('operator','update','booking',String(d.bookingId),JSON.stringify(changes))

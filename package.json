@@ -9,7 +9,8 @@
     "build": "electron-vite build",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "dist:win": "npm run build && electron-builder --win nsis portable --publish never"
+    "dist:win": "npm run build && electron-builder --win nsis portable --publish never",
+    "test:e2e": "node tests/electron.e2e.cjs"
   },
   "dependencies": {
     "better-sqlite3": "^11.10.0",
@@ -31,6 +32,7 @@
     "electron": "^34.0.0",
     "electron-builder": "^25.1.8",
     "electron-vite": "^3.0.0",
+    "playwright": "1.56.1",
     "typescript": "^5.7.2",
     "vite": "^6.0.6",
     "vitest": "^2.1.8"

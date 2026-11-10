@@ -9,6 +9,7 @@ permissions:
 jobs:
   windows:
     runs-on: windows-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -22,6 +23,16 @@ jobs:
         run: npm run dist:win
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - name: Exercise the real Electron reception workflow
+        run: npm run test:e2e
+      - name: Upload UI and print verification artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Eva-Camp-UI-and-print-checks
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 14
       - uses: actions/upload-artifact@v4
         with:
           name: Eva-Camp-Windows-development-build

@@ -9,7 +9,7 @@ import { managementReportHtml, reportCsv } from './reports'
 import { createVerifiedBackup, createManualBackup } from './backup'
 import { stageRestore, applyStagedRestore } from './restore'
 import { createPortableArchive, stagePortableRestore } from './portable'
-import { bookingSchema, paymentSchema, unitSchema, statusSchema, date, calendarRangeSchema, rescheduleSchema, searchSchema, bookingDetailsSchema, reportRangeSchema, replaceIdentitySchema, addCompanionSchema, updateCompanionSchema, companionRefSchema, portablePasswordSchema, transferSchema } from '../shared/contracts'
+import { bookingSchema, paymentSchema, unitSchema, statusSchema, date, calendarRangeSchema, rescheduleSchema, searchSchema, bookingDetailsSchema, reportRangeSchema, replaceIdentitySchema, addCompanionSchema, updateCompanionSchema, companionRefSchema, portablePasswordSchema, transferSchema, guestHistorySchema } from '../shared/contracts'
 
 protocol.registerSchemesAsPrivileged([{scheme:'evaprint',privileges:{standard:true,secure:true}}])
 const printPages=new Map<string,string>()
@@ -28,7 +28,8 @@ app.whenReady().then(()=>{
   if(!schema) db.exec(readFileSync(join(app.getAppPath(),'db/migrations/0001_initial.sql'),'utf8'))
   let version=(db.prepare('SELECT MAX(version) AS version FROM schema_migrations').get() as {version:number}).version
   if(version===1){db.exec(readFileSync(join(app.getAppPath(),'db/migrations/0002_unit_segments.sql'),'utf8'));version=2}
-  if(version!==2) throw new Error(`Unsupported database schema: ${version}`)
+  if(version===2){db.exec(readFileSync(join(app.getAppPath(),'db/migrations/0003_guest_lookup.sql'),'utf8'));version=3}
+  if(version!==3) throw new Error(`Unsupported database schema: ${version}`)
   let restoring=false
   let backupPending:Promise<unknown>=Promise.resolve()
   const backup=()=>{backupPending=track(backupPending.then(()=>createVerifiedBackup(db,join(dataDir,'backups'))).catch(error=>dialog.showErrorBox('Backup failed / تعذر النسخ الاحتياطي',String(error))));return backupPending}
@@ -98,6 +99,9 @@ app.whenReady().then(()=>{
   ipcMain.handle('companions:remove',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');const d=companionRefSchema.parse(raw);repository.removeCompanion(d.bookingId,d.companionId)})
   ipcMain.handle('companions:restore',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');const d=companionRefSchema.parse(raw);repository.restoreCompanion(d.bookingId,d.companionId)})
   ipcMain.handle('bookings:update-details',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');repository.updateBookingDetails(bookingDetailsSchema.parse(raw))})
+  ipcMain.handle('guests:find',(_event,query:unknown)=>repository.findGuests(searchSchema.parse(query)))
+  ipcMain.handle('guests:duplicates',(_event,phone:unknown)=>repository.duplicateGuests(searchSchema.parse(phone)))
+  ipcMain.handle('guests:history',(_event,raw:unknown)=>repository.guestHistory(guestHistorySchema.parse(raw)))
   ipcMain.handle('bookings:search',(_event,query:unknown)=>repository.searchBookings(searchSchema.parse(query)))
   ipcMain.handle('units:history',(_event,id:unknown)=>repository.unitHistory(statusSchema.shape.bookingId.parse(id)))
   ipcMain.handle('units:transfer',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');repository.transferUnit(transferSchema.parse(raw))})
