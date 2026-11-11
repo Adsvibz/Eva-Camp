@@ -19,7 +19,7 @@ erDiagram
  SERVICES o|--o{ BOOKING_EXTRAS : describes
 ```
 
-The migration contains lookup and calendar indexes, soft-delete columns, overlap triggers for active bookings and a view that computes paid and outstanding amounts. Negative payments represent refunds. An encrypted ID column and separate keyed lookup column reserve the data model for exact ID matching. Cryptography, key lifecycle, PIN handling and access control are **not yet implemented**. No real guest data should be stored until those have been implemented and reviewed.
+The migration contains lookup and calendar indexes, soft-delete columns, overlap triggers for active bookings and a view that computes paid and outstanding amounts. Negative payments represent refunds. An encrypted ID column and separate keyed lookup column reserve the data model for exact ID matching. ID encryption and an optional application PIN have initial implementations. Encrypted-ID lookup, key lifecycle, account recovery and independent security review remain incomplete. No real guest data should be stored until the remaining protections and recovery are implemented and reviewed.
 
 ## Print reference
 The attached image is a reference for header, wordmark, bilingual labels, section rules, field lines, title bar and A4 layout. The latest request specifies three companion lines; overflow for additional guests needs a separate continuation page, while the main page remains one A4 sheet. The image supplied is not a standalone logo. The runtime should use `assets/logo.png` if supplied and text fallback if absent. Arabic shaping and bidi must be tested in Chromium with bundled fonts.
@@ -34,7 +34,7 @@ The attached image is a reference for header, wordmark, bilingual labels, sectio
 ## Unresolved engineering requirements
 - Backup consistency must use SQLite's online backup API or VACUUM INTO, not a copy of a live WAL database. Test restoration and attachment completeness before pruning previous backups.
 - Windows DPAPI-backed key storage and backup/restore key recovery must be designed together; a backup that cannot decrypt IDs on another PC is unacceptable. A user-supplied recovery secret is a possible design, not implemented here.
-- A reliable launch lock requires main-process enforcement, password-hardening and lockout/recovery behavior; merely hiding the UI is insufficient.
+- The optional launch lock is enforced in main-process IPC, uses a salted scrypt verifier and persists a short failed-attempt delay. PIN recovery and protection against a person with direct database-file access are not implemented; this is not full-database encryption.
 - Today and monthly revenue must be defined separately from receipts, refunds and accrual; avoid silently conflating them.
 - Capacity, date validity for all date-bearing tables, preventing use of deleted/maintenance units, seasonal-rate overlap, invoice snapshots, deletion/undo semantics and atomic auditing still require domain implementation and tests.
 - The schema is a starting point, not a complete implementation, and must be reconciled with the eventual Drizzle schema before production.

@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto'
 import { readFileSync, writeFileSync, existsSync, rmSync, mkdirSync, statSync } from 'node:fs'
 import Database from 'better-sqlite3'
 import { CampRepository } from './repository'
+import { AppLock } from './lock'
 import { registrationHtml, receiptHtml, closingHtml } from './print'
 import { managementReportHtml, reportCsv } from './reports'
 import { createVerifiedBackup, createManualBackup } from './backup'
@@ -17,6 +18,7 @@ let db:Database.Database
 let shutdownStarted=false,shutdownFinished=false
 const pendingFileJobs=new Set<Promise<unknown>>()
 function track<T>(promise:Promise<T>):Promise<T>{pendingFileJobs.add(promise);promise.then(()=>pendingFileJobs.delete(promise),()=>pendingFileJobs.delete(promise));return promise}
+if(!app.requestSingleInstanceLock())app.exit(0)
 app.whenReady().then(()=>{
  try {
   const dataDir=app.getPath('userData');mkdirSync(dataDir,{recursive:true});const live=join(dataDir,'eva-camp.sqlite'),pending=join(dataDir,'restore-pending.sqlite'),previous=join(dataDir,'restore-previous.sqlite')
@@ -37,6 +39,19 @@ app.whenReady().then(()=>{
   let backupTimer=setInterval(()=>{void backup()},60*60*1000)
   app.once('before-quit',()=>clearInterval(backupTimer))
   const repository=new CampRepository(db,(value)=>{if(!safeStorage.isEncryptionAvailable())throw new Error('Identity encryption unavailable');return safeStorage.encryptString(value)},(value)=>{if(!safeStorage.isEncryptionAvailable())throw new Error('Identity decryption unavailable');return safeStorage.decryptString(value)})
+  const security=new AppLock(db)
+  let window:BrowserWindow
+  const publicChannels=new Set(['security:status','security:unlock'])
+  const handle=(channel:string,listener:(event:Electron.IpcMainInvokeEvent,...args:any[])=>unknown)=>ipcMain.handle(channel,(event,...args)=>{
+   if(event.sender!==window.webContents)throw new Error('UNTRUSTED_SENDER')
+   if(!publicChannels.has(channel))security.assertUnlocked()
+   return listener(event,...args)
+  })
+  handle('security:status',()=>({...security.status(),preferences:repository.getPreferences()}))
+  handle('security:unlock',(_event,pin:unknown)=>{security.unlock(pin);return security.status()})
+  handle('security:set',(_event,pin:unknown,current:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');security.setPin(pin,current);return security.status()})
+  handle('security:disable',(_event,current:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');security.disable(current);return security.status()})
+  handle('security:lock',()=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');security.lock();for(const view of BrowserWindow.getAllWindows())if(view!==window)view.close();printPages.clear();return security.status()})
   protocol.handle('evaprint',request=>{const url=new URL(request.url);const key=url.pathname.slice(1);const html=url.hostname==='preview'&&request.method==='GET'?printPages.get(key):undefined;return html===undefined?new Response('Not found',{status:404}):new Response(html,{headers:{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'}})})
   const fontsDir=join(app.getAppPath(),'assets/fonts')
   const font=(name:string)=>readFileSync(join(fontsDir,name)).toString('base64')
@@ -49,13 +64,13 @@ app.whenReady().then(()=>{
    preview.setMenu(Menu.buildFromTemplate([{label:'Print / طباعة',click:()=>preview.webContents.print({printBackground:true})},{label:'Save PDF / حفظ PDF',click:()=>{pdf().catch(error=>dialog.showErrorBox('PDF',String(error)))}}]))
    const key=randomUUID();printPages.set(key,html);preview.once('closed',()=>printPages.delete(key));try{await preview.loadURL(`evaprint://preview/${key}`)}catch(error){printPages.delete(key);preview.close();throw error}
   }
-  ipcMain.handle('registration:preview',async (_event,id:unknown)=>{
+  handle('registration:preview',async (_event,id:unknown)=>{
    const bookingId=id===null?null:statusSchema.shape.bookingId.parse(id)
    const logoPath=join(app.getAppPath(),'assets/logo.png')
    const logo=existsSync(logoPath)?`data:image/png;base64,${readFileSync(logoPath).toString('base64')}`:undefined
    await showPreview(registrationHtml(bookingId===null?null:repository.registrationData(bookingId),fonts,logo),'Eva_Camp_Registration.pdf')
   })
-  ipcMain.handle('receipt:preview',async (_event,id:unknown)=>{const paymentId=statusSchema.shape.bookingId.parse(id);await showPreview(receiptHtml(repository.receiptData(paymentId),fonts),'Eva_Camp_Receipt.pdf')})
+  handle('receipt:preview',async (_event,id:unknown)=>{const paymentId=statusSchema.shape.bookingId.parse(id);await showPreview(receiptHtml(repository.receiptData(paymentId),fonts),'Eva_Camp_Receipt.pdf')})
   const encryptIdentity=(value:string)=>{if(!safeStorage.isEncryptionAvailable())throw new Error('Identity encryption unavailable');return safeStorage.encryptString(value)}
   const decryptIdentity=(value:Buffer)=>{if(!safeStorage.isEncryptionAvailable())throw new Error('Identity decryption unavailable');return safeStorage.decryptString(value)}
   const finishRestore=async(window:BrowserWindow,stage:()=>Promise<void>)=>{
@@ -67,55 +82,55 @@ app.whenReady().then(()=>{
    try{await backupPending;await stage();staged=true;const recovery=join(dataDir,`pre-restore-${Date.now()}.sqlite`);await track(createManualBackup(db,recovery));const checkpoint=db.pragma('wal_checkpoint(TRUNCATE)') as {busy:number}[];if(checkpoint[0]?.busy)throw new Error('Database checkpoint is busy');app.relaunch();app.quit();return true}
    catch(error){if(staged)rmSync(pending,{force:true});restoring=false;backupTimer=setInterval(()=>{void backup()},60*60*1000);window.setEnabled(true);throw error}
   }
-  ipcMain.handle('backup:restore',async (event)=>{
+  handle('backup:restore',async (event)=>{
    if(restoring||shutdownStarted)throw new Error('Restore already in progress');const window=BrowserWindow.fromWebContents(event.sender);if(!window)throw new Error('Window unavailable')
    const choice=await dialog.showOpenDialog(window,{title:'Select backup / اختر النسخة الاحتياطية',properties:['openFile'],filters:[{name:'SQLite',extensions:['sqlite']}]});if(choice.canceled||!choice.filePaths[0])return false
    return finishRestore(window,()=>track(stageRestore(choice.filePaths[0],pending,value=>{decryptIdentity(value);return true})))
   })
-  ipcMain.handle('backup:portable-export',async (_event,raw:unknown)=>{
+  handle('backup:portable-export',async (_event,raw:unknown)=>{
    if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');const password=portablePasswordSchema.parse(raw)
    const stamp=new Date().toISOString().replace(/[:.]/g,'-');const choice=await dialog.showSaveDialog({title:'Export encrypted backup / تصدير نسخة مشفرة',defaultPath:`Eva_Camp_Portable_${stamp}.evabackup`,filters:[{name:'Eva Camp backup',extensions:['evabackup']}]});if(choice.canceled||!choice.filePath)return false
    if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');const archive=createPortableArchive(db,password,decryptIdentity);try{writeFileSync(choice.filePath,archive,{flag:'wx',mode:0o600})}finally{archive.fill(0)}return true
   })
-  ipcMain.handle('backup:portable-import',async (event,raw:unknown)=>{
+  handle('backup:portable-import',async (event,raw:unknown)=>{
    if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');const password=portablePasswordSchema.parse(raw);const window=BrowserWindow.fromWebContents(event.sender);if(!window)throw new Error('Window unavailable')
    const choice=await dialog.showOpenDialog(window,{title:'Select encrypted backup / اختر النسخة المشفرة',properties:['openFile'],filters:[{name:'Eva Camp backup',extensions:['evabackup']}]});if(choice.canceled||!choice.filePaths[0])return false
    return finishRestore(window,async()=>{if(statSync(choice.filePaths[0]).size>512*1024*1024)throw new Error('Backup is too large');const archive=readFileSync(choice.filePaths[0]);try{stagePortableRestore(archive,password,pending,encryptIdentity,decryptIdentity)}finally{archive.fill(0)}})
   })
-  ipcMain.handle('dashboard:summary',(_event,day:unknown)=>repository.dashboard(date.parse(day)))
-  ipcMain.handle('reports:summary',(_event,raw:unknown)=>{const r=reportRangeSchema.parse(raw);return repository.managementReport(r.start,r.end)})
-  ipcMain.handle('reports:preview',async (_event,raw:unknown)=>{const r=reportRangeSchema.parse(raw);await showPreview(managementReportHtml(repository.managementReport(r.start,r.end),fonts),'Eva_Camp_Report.pdf')})
-  ipcMain.handle('reports:csv',async (_event,raw:unknown)=>{const r=reportRangeSchema.parse(raw);const report=repository.managementReport(r.start,r.end);const choice=await dialog.showSaveDialog({title:'Export CSV / تصدير CSV',defaultPath:`Eva_Camp_Report_${r.start}_${r.end}.csv`,filters:[{name:'CSV',extensions:['csv']}]});if(choice.canceled||!choice.filePath)return false;writeFileSync(choice.filePath,reportCsv(report),'utf8');return true})
-  ipcMain.handle('closing:report',(_event,day:unknown)=>repository.dailyReport(date.parse(day)))
-  ipcMain.handle('closing:close',(_event,day:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');return repository.closeDay(date.parse(day))})
-  ipcMain.handle('closing:reopen',(_event,day:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');repository.reopenDay(date.parse(day));return repository.dailyReport(date.parse(day))})
-  ipcMain.handle('closing:preview',async (_event,day:unknown)=>{const report=repository.dailyReport(date.parse(day));await showPreview(closingHtml(report,fonts),'Eva_Camp_Closing.pdf')})
-  ipcMain.handle('backup:manual',async ()=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');const date=new Date().toISOString().replace(/[:.]/g,'-');const choice=await dialog.showSaveDialog({title:'Save backup / حفظ نسخة احتياطية',defaultPath:`Eva_Camp_Backup_${date}.sqlite`,filters:[{name:'SQLite',extensions:['sqlite']}]});if(choice.canceled||!choice.filePath)return false;await track(createManualBackup(db,choice.filePath));return true})
-  ipcMain.handle('units:list',()=>repository.listUnits())
-  ipcMain.handle('units:create',(_event,data:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');return repository.createUnit(unitSchema.parse(data))})
-  ipcMain.handle('identity:replace',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');return repository.replaceIdentity(replaceIdentitySchema.parse(raw))})
-  ipcMain.handle('identity:undo',(_event,id:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');repository.undoIdentity(statusSchema.shape.bookingId.parse(id))})
-  ipcMain.handle('companions:add',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');return repository.addCompanion(addCompanionSchema.parse(raw))})
-  ipcMain.handle('companions:update',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');repository.updateCompanion(updateCompanionSchema.parse(raw))})
-  ipcMain.handle('companions:remove',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');const d=companionRefSchema.parse(raw);repository.removeCompanion(d.bookingId,d.companionId)})
-  ipcMain.handle('companions:restore',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');const d=companionRefSchema.parse(raw);repository.restoreCompanion(d.bookingId,d.companionId)})
-  ipcMain.handle('bookings:update-details',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');repository.updateBookingDetails(bookingDetailsSchema.parse(raw))})
-  ipcMain.handle('preferences:get',()=>repository.getPreferences())
-  ipcMain.handle('preferences:save',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');repository.savePreferences(uiPreferencesSchema.parse(raw))})
-  ipcMain.handle('guests:find',(_event,query:unknown)=>repository.findGuests(searchSchema.parse(query)))
-  ipcMain.handle('guests:duplicates',(_event,phone:unknown)=>repository.duplicateGuests(searchSchema.parse(phone)))
-  ipcMain.handle('guests:history',(_event,raw:unknown)=>repository.guestHistory(guestHistorySchema.parse(raw)))
-  ipcMain.handle('bookings:search',(_event,query:unknown)=>repository.searchBookings(searchSchema.parse(query)))
-  ipcMain.handle('units:history',(_event,id:unknown)=>repository.unitHistory(statusSchema.shape.bookingId.parse(id)))
-  ipcMain.handle('units:transfer',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');repository.transferUnit(transferSchema.parse(raw))})
-  ipcMain.handle('calendar:list',(_event,raw:unknown)=>{const range=calendarRangeSchema.parse(raw);return repository.calendar(range.start,range.end)})
-  ipcMain.handle('calendar:reschedule',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');repository.reschedule(rescheduleSchema.parse(raw))})
-  ipcMain.handle('bookings:list',()=>repository.listBookings())
-  ipcMain.handle('bookings:get',(_event,id:unknown)=>repository.getBooking(statusSchema.shape.bookingId.parse(id)))
-  ipcMain.handle('bookings:status',(_event,data:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');const d=statusSchema.parse(data);repository.changeStatus(d.bookingId,d.status)})
-  ipcMain.handle('bookings:create',(_event,data:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');return repository.createBooking(bookingSchema.parse(data))})
-  ipcMain.handle('payments:create',(_event,data:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');return repository.addPayment(paymentSchema.parse(data))})
-  const window=new BrowserWindow({width:1280,height:820,minWidth:900,minHeight:650,show:false,backgroundColor:'#f4f4f2',webPreferences:{preload:join(__dirname,'../preload/preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true}})
+  handle('dashboard:summary',(_event,day:unknown)=>repository.dashboard(date.parse(day)))
+  handle('reports:summary',(_event,raw:unknown)=>{const r=reportRangeSchema.parse(raw);return repository.managementReport(r.start,r.end)})
+  handle('reports:preview',async (_event,raw:unknown)=>{const r=reportRangeSchema.parse(raw);await showPreview(managementReportHtml(repository.managementReport(r.start,r.end),fonts),'Eva_Camp_Report.pdf')})
+  handle('reports:csv',async (_event,raw:unknown)=>{const r=reportRangeSchema.parse(raw);const report=repository.managementReport(r.start,r.end);const choice=await dialog.showSaveDialog({title:'Export CSV / تصدير CSV',defaultPath:`Eva_Camp_Report_${r.start}_${r.end}.csv`,filters:[{name:'CSV',extensions:['csv']}]});if(choice.canceled||!choice.filePath)return false;writeFileSync(choice.filePath,reportCsv(report),'utf8');return true})
+  handle('closing:report',(_event,day:unknown)=>repository.dailyReport(date.parse(day)))
+  handle('closing:close',(_event,day:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');return repository.closeDay(date.parse(day))})
+  handle('closing:reopen',(_event,day:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');repository.reopenDay(date.parse(day));return repository.dailyReport(date.parse(day))})
+  handle('closing:preview',async (_event,day:unknown)=>{const report=repository.dailyReport(date.parse(day));await showPreview(closingHtml(report,fonts),'Eva_Camp_Closing.pdf')})
+  handle('backup:manual',async ()=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');const date=new Date().toISOString().replace(/[:.]/g,'-');const choice=await dialog.showSaveDialog({title:'Save backup / حفظ نسخة احتياطية',defaultPath:`Eva_Camp_Backup_${date}.sqlite`,filters:[{name:'SQLite',extensions:['sqlite']}]});if(choice.canceled||!choice.filePath)return false;await track(createManualBackup(db,choice.filePath));return true})
+  handle('units:list',()=>repository.listUnits())
+  handle('units:create',(_event,data:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');return repository.createUnit(unitSchema.parse(data))})
+  handle('identity:replace',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');return repository.replaceIdentity(replaceIdentitySchema.parse(raw))})
+  handle('identity:undo',(_event,id:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');repository.undoIdentity(statusSchema.shape.bookingId.parse(id))})
+  handle('companions:add',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');return repository.addCompanion(addCompanionSchema.parse(raw))})
+  handle('companions:update',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');repository.updateCompanion(updateCompanionSchema.parse(raw))})
+  handle('companions:remove',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');const d=companionRefSchema.parse(raw);repository.removeCompanion(d.bookingId,d.companionId)})
+  handle('companions:restore',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');const d=companionRefSchema.parse(raw);repository.restoreCompanion(d.bookingId,d.companionId)})
+  handle('bookings:update-details',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');repository.updateBookingDetails(bookingDetailsSchema.parse(raw))})
+  handle('preferences:get',()=>repository.getPreferences())
+  handle('preferences:save',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');repository.savePreferences(uiPreferencesSchema.parse(raw))})
+  handle('guests:find',(_event,query:unknown)=>repository.findGuests(searchSchema.parse(query)))
+  handle('guests:duplicates',(_event,phone:unknown)=>repository.duplicateGuests(searchSchema.parse(phone)))
+  handle('guests:history',(_event,raw:unknown)=>repository.guestHistory(guestHistorySchema.parse(raw)))
+  handle('bookings:search',(_event,query:unknown)=>repository.searchBookings(searchSchema.parse(query)))
+  handle('units:history',(_event,id:unknown)=>repository.unitHistory(statusSchema.shape.bookingId.parse(id)))
+  handle('units:transfer',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');repository.transferUnit(transferSchema.parse(raw))})
+  handle('calendar:list',(_event,raw:unknown)=>{const range=calendarRangeSchema.parse(raw);return repository.calendar(range.start,range.end)})
+  handle('calendar:reschedule',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');repository.reschedule(rescheduleSchema.parse(raw))})
+  handle('bookings:list',()=>repository.listBookings())
+  handle('bookings:get',(_event,id:unknown)=>repository.getBooking(statusSchema.shape.bookingId.parse(id)))
+  handle('bookings:status',(_event,data:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');const d=statusSchema.parse(data);repository.changeStatus(d.bookingId,d.status)})
+  handle('bookings:create',(_event,data:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');return repository.createBooking(bookingSchema.parse(data))})
+  handle('payments:create',(_event,data:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');return repository.addPayment(paymentSchema.parse(data))})
+  window=new BrowserWindow({width:1280,height:820,minWidth:900,minHeight:650,show:false,backgroundColor:'#f4f4f2',webPreferences:{preload:join(__dirname,'../preload/preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true}})
   window.once('ready-to-show',()=>window.show())
   window.webContents.setWindowOpenHandler(()=>({action:'deny'}))
   window.webContents.on('will-navigate',(e)=>e.preventDefault())

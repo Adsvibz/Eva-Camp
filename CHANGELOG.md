@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add optional application PIN with salted scrypt verification, persistent attempt delays, launch locking, and main-process access checks.
+
 - Prevent check-ins and immediate transfers into physically occupied rooms, including early arrivals and overdue departures; reject check-ins to cleaning or maintenance units.
 
 - Fix portable exports from a live SQLite database in WAL mode, and test uncheckpointed writes through recovery.
