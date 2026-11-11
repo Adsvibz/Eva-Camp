@@ -24,7 +24,7 @@ Database files are stored in Electron's userData directory. Startup performs a S
 ## العربية
 هذه نسخة تطوير غير مكتملة، ولا تصلح لإدخال بيانات العملاء الحقيقية أو تشغيل الاستقبال. تتضمن وظائف أولية للحجوزات والمدفوعات والنسخ الاحتياطي والاستعادة وإغلاق اليوم، لكنها لم تُختبر بالكامل على ويندوز ولم تكتمل بعد. لا تستخدمها مع بيانات عملاء حقيقية.
 
-See `docs/architecture.md` for the database design, risks and remaining verification gates. The paper form image in `assets` is a design reference, not an extracted logo.
+See `docs/architecture.md` for the database design, risks and remaining verification gates, and `docs/user-manual-ar.md` for the Arabic user manual. The paper form image in `assets` is a design reference, not an extracted logo.
 
 ## Portable backup
 

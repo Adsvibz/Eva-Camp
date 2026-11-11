@@ -8,10 +8,10 @@ Stack: Electron IPC, React, Zod, better-sqlite3, Vitest.
 
 Reference lock: preserve the existing Eva Camp monochrome modal, typography, fields and search-result buttons. Place returning-guest search before the primary details. Keep errors next to the relevant fields, use native buttons and labels, and retain Arabic RTL and keyboard access.
 
-- [ ] Write failing repository tests: explicit reuse, shared phone approval, normalized Arabic/local/international phone matching, profile preservation, deleted profiles, transactional rollback, pagination and migration backfill.
-- [ ] Add migration 3, normalization helper and shared contracts; support schema 3 in both backup formats and startup upgrades.
-- [ ] Implement guest search, exact duplicate suggestions and paginated history. Add optional guestId and allowSharedPhone to booking creation. Maintain the phone index when editing a profile.
-- [ ] Expose validated IPC methods, build returning-guest selector and history panel, and make linked-profile editing semantics explicit.
+- [x] Write failing repository tests: explicit reuse, shared phone approval, normalized Arabic/local/international phone matching, profile preservation, deleted profiles, transactional rollback, pagination and migration backfill.
+- [x] Add migration 3, normalization helper and shared contracts; support schema 3 in both backup formats and startup upgrades.
+- [x] Implement guest search, exact duplicate suggestions and paginated history. Add optional guestId and allowSharedPhone to booking creation. Maintain the phone index when editing a profile.
+- [x] Expose validated IPC methods, build returning-guest selector and history panel, and make linked-profile editing semantics explicit.
 - [ ] Run complete tests, TypeScript and production build, attempt UI testing, update documentation, push and verify Windows packaging.
 
 Review focus: shared family numbers must not merge people; stale guest selection must not overwrite a profile; conflict failures must leave no orphan guest or consumed booking reference; older backups must migrate correctly; history must have a way to reach records beyond the first page.

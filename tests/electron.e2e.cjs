@@ -18,6 +18,7 @@ async function preview(action,filename,text){
  const opened=app.waitForEvent('window',{timeout:15000})
  await action()
  const window=await opened
+ await window.waitForURL('evaprint://preview/**')
  await window.waitForLoadState('domcontentloaded')
  await window.evaluate(()=>document.fonts.ready)
  assert.ok((await window.locator('body').innerText()).includes(text))

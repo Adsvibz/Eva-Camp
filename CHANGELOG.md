@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Name the room-transfer selector for assistive technology and add an Arabic operating guide.
+- Update Zod and Drizzle ORM to versions that address currently reported production dependency advisories.
+
 - Add returning-guest selection, indexed phone normalization, explicit shared-phone acknowledgement and paginated guest stay history.
 - Add schema 3 upgrades and restore compatibility for schemas 1–3.
 - Add a Playwright suite exercising the real Electron application and Chromium PDF rendering on Windows; executables are uploaded only after it passes.
