@@ -1,3 +1,4 @@
+import {dashboardSummary} from './dashboard'
 import {uiPreferencesSchema, type UiPreferences} from '../shared/contracts'
 import { GuestDirectory } from './guests'
 import { normalizePhone } from '../shared/phone'
@@ -8,6 +9,7 @@ import { unitSchema,bookingSchema,paymentSchema,date,calendarRangeSchema,resched
 
 export class CampRepository {
  constructor(private db: Database.Database, private encrypt?: (value:string)=>Buffer, private decrypt?: (value:Buffer)=>string) { db.pragma('foreign_keys = ON') }
+ dashboard(day:string){return dashboardSummary(this.db,day)}
  findGuests(query:string){return new GuestDirectory(this.db).find(query)}
  duplicateGuests(phone:string){return new GuestDirectory(this.db).matchPhone(phone)}
  guestHistory(input:GuestHistoryInput){return new GuestDirectory(this.db).history(input)}

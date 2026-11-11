@@ -44,3 +44,6 @@ export type GuestHistoryPage={rows:BookingRow[];hasMore:boolean}
 
 export const uiPreferencesSchema=z.object({language:z.enum(['en','ar']),theme:z.enum(['light','dark','system'])}).strict()
 export type UiPreferences=z.infer<typeof uiPreferencesSchema>
+
+export type DashboardStay={id:number;reference:string;fullName:string;unitName:string;status:'reserved'|'checked-in';arrival:string;departure:string}
+export type DashboardSummary={day:string;totalUnits:number;occupiedUnits:number;occupancyPercent:number;inHouseBookings:number;inHouseGuests:number;arrivalsCount:number;departuresCount:number;todayCollectionsPiasters:number;monthCollectionsPiasters:number;outstandingPiasters:number;unitStatuses:{available:number;reserved:number;occupied:number;cleaning:number;maintenance:number};arrivals:DashboardStay[];departures:DashboardStay[]}

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add a database-backed bilingual front-desk dashboard with arrival and departure lists, occupancy, unit states, net collections and outstanding balances.
+
 - Add persisted English/Arabic and light/dark/system preferences, with Cairo and Noto Serif fonts bundled locally.
 
 - Exercise the unpacked packaged Windows executable, its bundled SQLite module and print template in CI.

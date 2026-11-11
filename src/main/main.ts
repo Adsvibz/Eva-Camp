@@ -82,6 +82,7 @@ app.whenReady().then(()=>{
    const choice=await dialog.showOpenDialog(window,{title:'Select encrypted backup / اختر النسخة المشفرة',properties:['openFile'],filters:[{name:'Eva Camp backup',extensions:['evabackup']}]});if(choice.canceled||!choice.filePaths[0])return false
    return finishRestore(window,async()=>{if(statSync(choice.filePaths[0]).size>512*1024*1024)throw new Error('Backup is too large');const archive=readFileSync(choice.filePaths[0]);try{stagePortableRestore(archive,password,pending,encryptIdentity,decryptIdentity)}finally{archive.fill(0)}})
   })
+  ipcMain.handle('dashboard:summary',(_event,day:unknown)=>repository.dashboard(date.parse(day)))
   ipcMain.handle('reports:summary',(_event,raw:unknown)=>{const r=reportRangeSchema.parse(raw);return repository.managementReport(r.start,r.end)})
   ipcMain.handle('reports:preview',async (_event,raw:unknown)=>{const r=reportRangeSchema.parse(raw);await showPreview(managementReportHtml(repository.managementReport(r.start,r.end),fonts),'Eva_Camp_Report.pdf')})
   ipcMain.handle('reports:csv',async (_event,raw:unknown)=>{const r=reportRangeSchema.parse(raw);const report=repository.managementReport(r.start,r.end);const choice=await dialog.showSaveDialog({title:'Export CSV / تصدير CSV',defaultPath:`Eva_Camp_Report_${r.start}_${r.end}.csv`,filters:[{name:'CSV',extensions:['csv']}]});if(choice.canceled||!choice.filePath)return false;writeFileSync(choice.filePath,reportCsv(report),'utf8');return true})
