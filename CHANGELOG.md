@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fix portable exports from a live SQLite database in WAL mode, and test uncheckpointed writes through recovery.
+
 - Reject backup snapshots and restores with broken foreign-key relationships, preserving existing backup files. Add Windows end-to-end coverage for manual and portable backup recovery.
 
 - Add a database-backed bilingual front-desk dashboard with arrival and departure lists, occupancy, unit states, net collections and outstanding balances.

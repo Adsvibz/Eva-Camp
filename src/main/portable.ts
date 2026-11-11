@@ -22,7 +22,11 @@ function convertIdentities(db:Database.Database,convert:(value:Buffer)=>Buffer){
 }
 /** The only plaintext copy is held in memory; the resulting archive is encrypted and authenticated. */
 export function createPortableArchive(live:Database.Database,password:string,decrypt:(value:Buffer)=>string):Buffer {
- const salt=randomBytes(16),iv=randomBytes(12),key=passwordKey(password,salt),snapshot=new Database(live.serialize())
+ const salt=randomBytes(16),iv=randomBytes(12),key=passwordKey(password,salt),serialized=live.serialize()
+ // SQLite cannot deserialize a WAL-mode header into memory; normalize the serialized copy only.
+ // sqlite3_serialize has already included committed WAL pages in the snapshot.
+ serialized[18]=1;serialized[19]=1
+ const snapshot=new Database(serialized);serialized.fill(0)
  let plain:Buffer|undefined
  try{
   snapshot.pragma('temp_store = MEMORY');snapshot.pragma('journal_mode = MEMORY');snapshot.pragma('secure_delete = ON');snapshot.pragma('foreign_keys = ON');verify(snapshot)
