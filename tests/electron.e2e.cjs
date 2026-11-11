@@ -15,7 +15,7 @@ const day='2026-11-10'
 const closeModal=()=>page.locator('.dialog-head .close').click()
 const save=()=>page.locator('.dialog > form > .form-actions .primary').click()
 const fill=(key,value)=>page.locator(`input[name="${key}"]`).fill(value)
-async function preview(action,filename,text){
+async function preview(action,filename,text,minimumPages=1){
  const opened=app.waitForEvent('window',{timeout:15000})
  await action()
  const window=await opened
@@ -31,7 +31,8 @@ async function preview(action,filename,text){
  },url)
  const pdf=Buffer.from(encoded,'base64')
  assert.equal(pdf.subarray(0,5).toString(),'%PDF-')
- assert.equal((pdf.toString('latin1').match(/\/Type\s*\/Page\b/g)||[]).length,1,'Expected one A4 page')
+ const pages=(pdf.toString('latin1').match(/\/Type\s*\/Page\b/g)||[]).length
+ if(minimumPages===1)assert.equal(pages,1,'Expected one A4 page');else assert.ok(pages>=minimumPages,`Expected at least ${minimumPages} A4 pages`)
  fs.writeFileSync(path.join(artifacts,filename+'.pdf'),pdf)
  await window.screenshot({path:path.join(artifacts,filename+'.png'),fullPage:true})
  await app.evaluate(({BrowserWindow},url)=>BrowserWindow.getAllWindows().find(w=>w.webContents.getURL()===url)?.close(),url)
@@ -109,6 +110,7 @@ async function booking(arrival,departure){
  let withExtras=await page.evaluate(id=>window.eva.getBooking(id),first.id);assert.equal(withExtras.totalDuePiasters,120000);assert.equal(withExtras.balancePiasters,95000)
  await page.locator('.extras').getByRole('button',{name:'Remove',exact:true}).click();await page.locator('.extras').getByRole('button',{name:'Undo removal',exact:true}).waitFor();await page.locator('.extras').getByRole('button',{name:'Undo removal',exact:true}).click();await page.waitForFunction(async id=>(await window.eva.getBooking(id)).extrasPiasters===20000,first.id)
  await preview(()=>page.getByRole('button',{name:'Registration form',exact:true}).click(),'registration-extras','1200.00')
+ await preview(()=>page.getByRole('button',{name:'Invoice',exact:true}).click(),'invoice','1200.00')
  await closeModal()
  await booking('2026-11-15','2026-11-17')
  await page.getByLabel('Find a returning guest',{exact:true}).fill('+20 122 075 5755')
@@ -159,6 +161,8 @@ async function booking(arrival,departure){
  assert.equal((await page.evaluate(guestId=>window.eva.guestHistory({guestId}),first.guestId)).rows.length,2)
  const physicalSafety=await page.evaluate(async()=>{const local=(offset)=>{const d=new Date();d.setDate(d.getDate()+offset);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`};const unit=await window.eva.createUnit({name:'Occupancy safety',type:'room',capacity:2,pricePiasters:0});const make=(fullName,arrival,departure)=>window.eva.createBooking({fullName,phone:'',unitId:unit,arrival,departure,adults:1,children:0,totalPiasters:0,source:'phone'});const old=await make('Overdue guest',local(-2),local(0)),next=await make('Next guest',local(0),local(2));await window.eva.changeStatus(old.id,'checked-in');let rejected=false;try{await window.eva.changeStatus(next.id,'checked-in')}catch(error){rejected=String(error).includes('UNIT_OCCUPIED')}const status=(await window.eva.getBooking(next.id)).status;await window.eva.changeStatus(old.id,'checked-out');await window.eva.changeStatus(next.id,'checked-in');return {rejected,status,after:(await window.eva.getBooking(next.id)).status}})
  assert.deepEqual(physicalSafety,{rejected:true,status:'reserved',after:'checked-in'})
+ await page.evaluate(async id=>{for(let i=0;i<55;i++)await window.eva.addExtra({bookingId:id,description:`Long-${i}`,quantity:1,unitPricePiasters:1})},first.id)
+ await preview(()=>page.evaluate(id=>window.eva.previewInvoice(id),first.id),'invoice-many-items','Long-54',2)
  await app.close();app=null
  // Exercise the packaged executable and bundled native module with a separate disposable profile.
  const executable=path.join(root,'dist','win-unpacked','Eva Camp.exe')

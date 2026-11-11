@@ -1,4 +1,5 @@
 import {dashboardSummary} from './dashboard'
+import type {InvoiceData} from './invoice'
 import {addExtraSchema,extraRefSchema,type AddExtraInput,type ExtraRef,type BookingExtra} from '../shared/contracts'
 import {uiPreferencesSchema, type UiPreferences} from '../shared/contracts'
 import { GuestDirectory } from './guests'
@@ -6,7 +7,7 @@ import { normalizePhone } from '../shared/phone'
 import type { GuestHistoryInput } from '../shared/contracts'
 import type Database from 'better-sqlite3'
 import type {RegistrationData,ReceiptData} from './print'
-import { unitSchema,bookingSchema,paymentSchema,date,calendarRangeSchema,rescheduleSchema,searchSchema,bookingDetailsSchema,reportRangeSchema,transferSchema,replaceIdentitySchema,addCompanionSchema,updateCompanionSchema,companionRefSchema, type UnitInput,type BookingInput,type PaymentInput,type BookingRow,type UnitRow,type BookingDetail,type DailyReport,type CalendarBooking,type RescheduleInput,type BookingDetailsInput,type ManagementReport,type ReplaceIdentityInput,type AddCompanionInput,type UpdateCompanionInput,type TransferInput,type UnitSegment } from '../shared/contracts'
+import { unitSchema,bookingSchema,paymentSchema,statusSchema,date,calendarRangeSchema,rescheduleSchema,searchSchema,bookingDetailsSchema,reportRangeSchema,transferSchema,replaceIdentitySchema,addCompanionSchema,updateCompanionSchema,companionRefSchema, type UnitInput,type BookingInput,type PaymentInput,type BookingRow,type UnitRow,type BookingDetail,type DailyReport,type CalendarBooking,type RescheduleInput,type BookingDetailsInput,type ManagementReport,type ReplaceIdentityInput,type AddCompanionInput,type UpdateCompanionInput,type TransferInput,type UnitSegment } from '../shared/contracts'
 
 function localDay():string{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
 
@@ -104,6 +105,16 @@ export class CampRepository {
  }
 
 
+ invoiceData(bookingId:number):InvoiceData{
+  statusSchema.shape.bookingId.parse(bookingId)
+  return this.db.transaction(()=>{
+   const row=this.db.prepare(`SELECT b.booking_reference AS reference,g.full_name AS fullName,u.name AS unitName,u.type AS unitType,b.arrival_date AS arrival,b.departure_date AS departure,b.status,v.total_piasters AS basePiasters,v.discount_piasters AS discountPiasters,v.extras_piasters AS extrasPiasters,v.total_piasters-v.discount_piasters+v.extras_piasters AS totalPiasters,v.paid_piasters AS paidPiasters,v.balance_piasters AS balancePiasters FROM bookings b JOIN guests g ON g.id=b.guest_id JOIN units u ON u.id=b.unit_id JOIN booking_balances v ON v.booking_id=b.id WHERE b.id=? AND b.deleted_at IS NULL`).get(bookingId) as Omit<InvoiceData,'extras'|'payments'>|undefined
+   if(!row)throw new Error('Booking not found')
+   const extras=this.listExtras(bookingId)
+   const payments=this.db.prepare('SELECT receipt_no AS receiptNo,payment_date AS date,method,amount_piasters AS amountPiasters FROM payments WHERE booking_id=? AND deleted_at IS NULL ORDER BY payment_date,id').all(bookingId) as InvoiceData['payments']
+   return {...row,extras,payments}
+  })()
+ }
  listExtras(bookingId:number):BookingExtra[]{
   extraRefSchema.shape.bookingId.parse(bookingId)
   return this.db.prepare('SELECT e.id,e.description,e.quantity,e.unit_price_piasters AS unitPricePiasters FROM booking_extras e JOIN bookings b ON b.id=e.booking_id WHERE e.booking_id=? AND e.deleted_at IS NULL AND b.deleted_at IS NULL ORDER BY e.id').all(bookingId) as BookingExtra[]

@@ -6,6 +6,7 @@ import Database from 'better-sqlite3'
 import { CampRepository } from './repository'
 import {addExtraSchema,extraRefSchema} from '../shared/contracts'
 import { AppLock } from './lock'
+import {invoiceHtml} from './invoice'
 import { registrationHtml, receiptHtml, closingHtml } from './print'
 import { managementReportHtml, reportCsv } from './reports'
 import { createVerifiedBackup, createManualBackup } from './backup'
@@ -70,6 +71,11 @@ app.whenReady().then(()=>{
    const logoPath=join(app.getAppPath(),'assets/logo.png')
    const logo=existsSync(logoPath)?`data:image/png;base64,${readFileSync(logoPath).toString('base64')}`:undefined
    await showPreview(registrationHtml(bookingId===null?null:repository.registrationData(bookingId),fonts,logo),'Eva_Camp_Registration.pdf')
+  })
+  handle('invoice:preview',async (_event,id:unknown)=>{
+   const bookingId=statusSchema.shape.bookingId.parse(id),now=new Date(),day=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`
+   const logoPath=join(app.getAppPath(),'assets/logo.png'),logo=existsSync(logoPath)?`data:image/png;base64,${readFileSync(logoPath).toString('base64')}`:undefined
+   await showPreview(invoiceHtml(repository.invoiceData(bookingId),day,fonts,logo),'Eva_Camp_Invoice.pdf')
   })
   handle('receipt:preview',async (_event,id:unknown)=>{const paymentId=statusSchema.shape.bookingId.parse(id);await showPreview(receiptHtml(repository.receiptData(paymentId),fonts),'Eva_Camp_Receipt.pdf')})
   const encryptIdentity=(value:string)=>{if(!safeStorage.isEncryptionAvailable())throw new Error('Identity encryption unavailable');return safeStorage.encryptString(value)}

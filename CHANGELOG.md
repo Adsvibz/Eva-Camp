@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add bilingual itemized booking statements with accommodation, services, payments, refunds and balances, printable or exportable to PDF.
+
 - Add itemized services and extras to active bookings, with audited removal and undo, balance calculations and backup coverage.
 
 - Add optional application PIN with salted scrypt verification, persistent attempt delays, launch locking, and main-process access checks.
