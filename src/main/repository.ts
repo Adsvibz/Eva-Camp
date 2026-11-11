@@ -1,3 +1,4 @@
+import {discountSchema,type DiscountInput} from '../shared/contracts'
 import {dashboardSummary} from './dashboard'
 import {updateUnitSchema,type UpdateUnitInput} from '../shared/contracts'
 import type {InvoiceData} from './invoice'
@@ -124,6 +125,19 @@ export class CampRepository {
    const extras=this.listExtras(bookingId)
    const payments=this.db.prepare('SELECT receipt_no AS receiptNo,payment_date AS date,method,amount_piasters AS amountPiasters FROM payments WHERE booking_id=? AND deleted_at IS NULL ORDER BY payment_date,id').all(bookingId) as InvoiceData['payments']
    return {...row,extras,payments}
+  })()
+ }
+ setDiscount(input:DiscountInput):void {
+  const d=discountSchema.parse(input)
+  this.db.transaction(()=>{
+   this.activeBooking(d.bookingId)
+   const row=this.db.prepare('SELECT total_piasters AS base,discount_piasters AS discount,extras_piasters AS extras FROM booking_balances WHERE booking_id=?').get(d.bookingId) as {base:number;discount:number;extras:number}
+   if(row.discount!==d.expectedDiscountPiasters)throw new Error('DISCOUNT_CHANGED')
+   if(d.discountPiasters>row.base)throw new Error('DISCOUNT_TOO_LARGE')
+   if(!Number.isSafeInteger(row.extras)||row.base-d.discountPiasters>Number.MAX_SAFE_INTEGER-row.extras)throw new Error('EXTRA_AMOUNT_TOO_LARGE')
+   if(row.discount===d.discountPiasters)return
+   this.db.prepare('UPDATE bookings SET discount_piasters=? WHERE id=?').run(d.discountPiasters,d.bookingId)
+   this.db.prepare('INSERT INTO audit_log(actor,action,entity_type,entity_id,detail_json) VALUES (?,?,?,?,?)').run('operator','discount-update','booking',String(d.bookingId),JSON.stringify({beforePiasters:row.discount,afterPiasters:d.discountPiasters}))
   })()
  }
  listExtras(bookingId:number):BookingExtra[]{

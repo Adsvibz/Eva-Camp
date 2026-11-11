@@ -93,3 +93,10 @@ Open a reserved or checked-in booking to add meals, trips, snorkeling, safari, l
 ## Unit setup and housekeeping
 
 From Units, choose **Edit unit** to change its name, type, capacity, default nightly price, housekeeping status or notes. Cleaning and maintenance mark the unit unavailable for new bookings, transfers and check-ins until changed back to Ready, including bookings for future dates; existing reservations are not cancelled. Occupancy and reservation statuses are calculated from bookings separately. Capacity cannot be reduced below active assigned bookings, including overdue checked-in guests. The default price is a reference; staff must enter booking totals manually. Price changes do not recalculate existing bookings. Unit names are live references and changes appear in past booking views. Changes are recorded in the audit log.
+
+
+## Accommodation discounts
+
+Booking details → Accommodation discount accepts a fixed EGP amount, including Arabic digits, with at most two decimal places. It applies to accommodation only and cannot exceed its base amount. Enter zero to remove it. Reserved and checked-in bookings are editable; checked-out and cancelled bookings are read-only. Each change saves the before/after amounts in the audit log in the same transaction. Undo is available while the screen remains open and refuses to overwrite a subsequently changed discount.
+
+Current balances, the registration form, booking statement, dashboard and management report reflect the discount. Payments, receipts and closed-day collections are unchanged. A negative balance is a guest credit; staff must record an actual refund separately. Discounts are fixed amounts, not percentages, and do not apply taxes or service-charge rules.

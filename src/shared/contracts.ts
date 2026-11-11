@@ -55,3 +55,6 @@ export const extraRefSchema=z.object({bookingId:z.number().int().positive().safe
 export type AddExtraInput=z.infer<typeof addExtraSchema>
 export type ExtraRef=z.infer<typeof extraRefSchema>
 export type BookingExtra={id:number;description:string;quantity:number;unitPricePiasters:number}
+
+export const discountSchema=z.object({bookingId:z.number().int().positive().safe(),discountPiasters:z.number().int().min(0).safe(),expectedDiscountPiasters:z.number().int().min(0).safe()}).strict()
+export type DiscountInput=z.infer<typeof discountSchema>

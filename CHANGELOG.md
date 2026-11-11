@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add fixed accommodation discounts with exact Arabic/English amount entry, transactional before/after audit, guarded undo, and credit-balance guidance.
+
 - Add unit editing and housekeeping status controls, capacity safeguards, and audit details.
 
 - Add bilingual itemized booking statements with accommodation, services, payments, refunds and balances, printable or exportable to PDF.
