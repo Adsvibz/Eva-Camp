@@ -15,6 +15,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Check for high and critical dependency advisories
+        run: npm audit --audit-level=high
       - run: npm run typecheck
       - run: npm test
       - run: npm run dist:win

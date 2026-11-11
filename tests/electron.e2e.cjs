@@ -43,6 +43,8 @@ async function booking(arrival,departure){
 ;(async()=>{
  app=await electron.launch({args:[path.join(root,'electron-test-bootstrap.cjs')],env:{...process.env,EVA_TEST_DATA_DIR:data},timeout:30000})
  page=await app.firstWindow();page.setDefaultTimeout(15000)
+ const electronVersion=await app.evaluate(()=>process.versions.electron)
+ assert.ok(Number(electronVersion.split('.')[0])>=45,`Unexpected Electron version: ${electronVersion}`)
  page.on('pageerror',error=>errors.push(error.message))
  page.on('dialog',dialog=>dialog.accept())
  await page.getByRole('button',{name:'New booking',exact:true}).waitFor()

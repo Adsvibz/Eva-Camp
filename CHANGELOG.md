@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Upgrade Electron to 45.3.0, electron-builder to 26.18.0 and Vitest to 5.1.0; run a high-severity dependency audit and assert the Electron version in Windows CI.
+
 - Name the room-transfer selector for assistive technology and add an Arabic operating guide.
 - Update Zod and Drizzle ORM to versions that address currently reported production dependency advisories.
 

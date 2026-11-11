@@ -6,7 +6,7 @@ Implemented in this snapshot: create units; create a guest and reservation in on
 
 ## Developer setup
 
-Use Node.js 20 LTS or 22 LTS, a C++ build toolchain and Python required by better-sqlite3. On Windows use the current Visual Studio C++ build tools. From this directory:
+Use Node.js 22.12 or later (22 LTS or 24 LTS), a C++ build toolchain and Python required by better-sqlite3. The Windows builds target 64-bit Windows; 32-bit Windows is not supported. On Windows use the current Visual Studio C++ build tools. From this directory:
 
 ```sh
 npm ci
@@ -32,7 +32,7 @@ The development build can export a password-protected `.evabackup` containing th
 
 ## Windows development build in GitHub Actions
 
-On pushes to `main`, pull requests, or a manual workflow dispatch, the Windows build workflow installs dependencies, runs the TypeScript and Vitest checks, builds an NSIS installer and a portable executable, and uploads them as a development artifact for 14 days. Tagged versions also prepare a draft release. The resulting files are development builds and must not be used for real guest records until the unresolved issues and Windows testing are complete.
+On pushes to `main`, pull requests, or a manual workflow dispatch, the Windows build workflow installs dependencies, checks for high and critical dependency advisories, runs the TypeScript and Vitest checks, builds an NSIS installer and a portable executable, and uploads them as a development artifact for 14 days. Tagged versions also prepare a draft release. The resulting files are development builds and must not be used for real guest records until the unresolved issues and Windows testing are complete.
 
 ## Unit transfers
 
@@ -57,3 +57,7 @@ Booking details include **Guest stay history**, with 50 entries per page and acc
 `npm run test:e2e` uses Playwright to launch the built Electron application against an isolated temporary database. Run it after `npm run dist:win` on Windows so the SQLite native module targets Electron. It exercises the real preload/IPC and database, creates fake guests and companions, checks in, transfers a unit, records a payment, selects a returning guest, rejects an unacknowledged duplicate, permits a shared family phone, closes the day and checks persistence after restarting. It also renders filled/blank registration forms and a receipt through Electron `printToPDF`, checks each is one page, and saves PDFs/screenshots to `test-results`.
 
 Both Windows workflows now run this check before uploading executables or drafting a release. The separate UI artifact contains only synthetic test records. This test does not install NSIS on a clean PC, exercise a physical printer, or establish complete visual fidelity to the paper original. Local execution in the current Linux environment is blocked by the absence of a display server; Windows CI is the execution target.
+
+## Dependency security
+
+Electron, electron-builder and Vitest were updated to address the high and critical advisories reported by npm on 11 November 2026. The full audit still reported six moderate findings in the build-time electron-builder/minimatch dependency chain. An npm audit is a point-in-time dependency check and is not a security review of the application. Windows CI rejects builds when npm reports high or critical advisories.
