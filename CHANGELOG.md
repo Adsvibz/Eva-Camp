@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Prevent check-ins and immediate transfers into physically occupied rooms, including early arrivals and overdue departures; reject check-ins to cleaning or maintenance units.
+
 - Fix portable exports from a live SQLite database in WAL mode, and test uncheckpointed writes through recovery.
 
 - Reject backup snapshots and restores with broken foreign-key relationships, preserving existing backup files. Add Windows end-to-end coverage for manual and portable backup recovery.

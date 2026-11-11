@@ -73,3 +73,8 @@ Open **Preferences** from the sidebar to select English or Arabic and Light, Dar
 ### Windows backup test scope
 
 The Windows CI backup test uses disposable synthetic records and the real Electron main process, SQLite and Windows safeStorage. It simulates file selection and confirmation dialogs, tests the wrong password without replacing data, restores both backup formats across restarts, and checks that a sample identity decrypts in the print preview. It does not test a second Windows account, a second physical computer, USB/OneDrive reliability or independently review the cryptography.
+
+
+## Physical room occupancy checks
+
+On check-in, the application checks the current local date against dated room assignments and refuses a room occupied by any guest who has not checked out, including early and overdue stays. Cleaning and maintenance rooms cannot be checked in. Immediate or backdated transfers also refuse a room currently occupied by another checked-in guest. The change and audit entry are transactional. Future-dated transfers remain scheduled by date, so staff must check for overdue stays before the transfer date and keep check-out status current; the app does not yet automatically resolve a conflict that arises later when a scheduled transfer becomes effective.

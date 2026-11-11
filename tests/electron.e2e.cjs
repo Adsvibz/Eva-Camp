@@ -150,6 +150,8 @@ async function booking(arrival,departure){
  await page.getByRole('button',{name:'New booking',exact:true}).waitFor()
  assert.equal((await page.evaluate(()=>window.eva.listBookings())).length,3)
  assert.equal((await page.evaluate(guestId=>window.eva.guestHistory({guestId}),first.guestId)).rows.length,2)
+ const physicalSafety=await page.evaluate(async()=>{const local=(offset)=>{const d=new Date();d.setDate(d.getDate()+offset);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`};const unit=await window.eva.createUnit({name:'Occupancy safety',type:'room',capacity:2,pricePiasters:0});const make=(fullName,arrival,departure)=>window.eva.createBooking({fullName,phone:'',unitId:unit,arrival,departure,adults:1,children:0,totalPiasters:0,source:'phone'});const old=await make('Overdue guest',local(-2),local(0)),next=await make('Next guest',local(0),local(2));await window.eva.changeStatus(old.id,'checked-in');let rejected=false;try{await window.eva.changeStatus(next.id,'checked-in')}catch(error){rejected=String(error).includes('UNIT_OCCUPIED')}const status=(await window.eva.getBooking(next.id)).status;await window.eva.changeStatus(old.id,'checked-out');await window.eva.changeStatus(next.id,'checked-in');return {rejected,status,after:(await window.eva.getBooking(next.id)).status}})
+ assert.deepEqual(physicalSafety,{rejected:true,status:'reserved',after:'checked-in'})
  await app.close();app=null
  // Exercise the packaged executable and bundled native module with a separate disposable profile.
  const executable=path.join(root,'dist','win-unpacked','Eva Camp.exe')

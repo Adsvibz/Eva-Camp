@@ -7,8 +7,10 @@ import type Database from 'better-sqlite3'
 import type {RegistrationData,ReceiptData} from './print'
 import { unitSchema,bookingSchema,paymentSchema,date,calendarRangeSchema,rescheduleSchema,searchSchema,bookingDetailsSchema,reportRangeSchema,transferSchema,replaceIdentitySchema,addCompanionSchema,updateCompanionSchema,companionRefSchema, type UnitInput,type BookingInput,type PaymentInput,type BookingRow,type UnitRow,type BookingDetail,type DailyReport,type CalendarBooking,type RescheduleInput,type BookingDetailsInput,type ManagementReport,type ReplaceIdentityInput,type AddCompanionInput,type UpdateCompanionInput,type TransferInput,type UnitSegment } from '../shared/contracts'
 
+function localDay():string{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
+
 export class CampRepository {
- constructor(private db: Database.Database, private encrypt?: (value:string)=>Buffer, private decrypt?: (value:Buffer)=>string) { db.pragma('foreign_keys = ON') }
+ constructor(private db: Database.Database, private encrypt?: (value:string)=>Buffer, private decrypt?: (value:Buffer)=>string, private today:()=>string=localDay) { db.pragma('foreign_keys = ON') }
  dashboard(day:string){return dashboardSummary(this.db,day)}
  findGuests(query:string){return new GuestDirectory(this.db).find(query)}
  duplicateGuests(phone:string){return new GuestDirectory(this.db).matchPhone(phone)}
@@ -26,6 +28,26 @@ export class CampRepository {
    this.db.prepare("INSERT INTO settings(key,value_json) VALUES ('ui:preferences',?) ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json").run(JSON.stringify(d))
    this.audit('preferences-update','settings','ui:preferences')
   })()
+ }
+ private effectiveUnit(bookingId:number,day:string):number {
+  date.parse(day)
+  const row=this.db.prepare(`SELECT COALESCE(
+    (SELECT s.unit_id FROM booking_unit_segments s WHERE s.booking_id=b.id AND s.start_date<=@day AND s.end_date>@day ORDER BY s.start_date DESC,s.id DESC LIMIT 1),
+    CASE WHEN @day<b.arrival_date THEN (SELECT s.unit_id FROM booking_unit_segments s WHERE s.booking_id=b.id ORDER BY s.start_date,s.id LIMIT 1)
+    ELSE (SELECT s.unit_id FROM booking_unit_segments s WHERE s.booking_id=b.id ORDER BY s.start_date DESC,s.id DESC LIMIT 1) END
+  ) AS unitId FROM bookings b WHERE b.id=@id AND b.deleted_at IS NULL`).get({id:bookingId,day}) as {unitId:number|null}|undefined
+  if(!row?.unitId)throw new Error('UNIT_ASSIGNMENT_MISSING')
+  return row.unitId
+ }
+ private assertPhysicallyAvailable(unitId:number,bookingId:number,day:string):void {
+  const unit=this.db.prepare("SELECT id FROM units WHERE id=? AND deleted_at IS NULL AND housekeeping_status='available'").get(unitId)
+  if(!unit)throw new Error('UNIT_UNAVAILABLE')
+  const conflict=this.db.prepare(`SELECT b.id FROM bookings b WHERE b.status='checked-in' AND b.deleted_at IS NULL AND b.id<>@id AND COALESCE(
+    (SELECT s.unit_id FROM booking_unit_segments s WHERE s.booking_id=b.id AND s.start_date<=@day AND s.end_date>@day ORDER BY s.start_date DESC,s.id DESC LIMIT 1),
+    CASE WHEN @day<b.arrival_date THEN (SELECT s.unit_id FROM booking_unit_segments s WHERE s.booking_id=b.id ORDER BY s.start_date,s.id LIMIT 1)
+    ELSE (SELECT s.unit_id FROM booking_unit_segments s WHERE s.booking_id=b.id ORDER BY s.start_date DESC,s.id DESC LIMIT 1) END
+   )=@unit LIMIT 1`).get({id:bookingId,day,unit:unitId})
+  if(conflict)throw new Error('UNIT_OCCUPIED')
  }
  private audit(action:string,entity:string,id:number|string) { this.db.prepare('INSERT INTO audit_log(actor,action,entity_type,entity_id) VALUES (?,?,?,?)').run('operator',action,entity,String(id)) }
  private sequence(name:string,year:number):number {
@@ -146,6 +168,7 @@ export class CampRepository {
    const row=this.db.prepare('SELECT status FROM bookings WHERE id=? AND deleted_at IS NULL').get(id) as {status:string}|undefined
    const transitions:Record<string,string[]>={'reserved':['checked-in','cancelled'],'checked-in':['checked-out'],'checked-out':[],'cancelled':['reserved']}
    if(!row||!transitions[row.status]?.includes(status))throw new Error('Invalid status transition')
+   if(status==='checked-in'){const day=this.today();this.assertPhysicallyAvailable(this.effectiveUnit(id,day),id,day)}
    this.db.prepare('UPDATE bookings SET status=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(status,id)
    this.audit('status:'+status,'booking',id)
   })()
@@ -178,6 +201,7 @@ export class CampRepository {
    if(!unit)throw new Error('Unit unavailable');if(booking.guests>unit.capacity)throw new Error('Unit capacity exceeded')
    const segment=this.db.prepare('SELECT id,unit_id AS unitId,start_date AS start,end_date AS end FROM booking_unit_segments WHERE booking_id=? ORDER BY start_date DESC,id DESC LIMIT 1').get(d.bookingId) as {id:number;unitId:number;start:string;end:string}|undefined
    if(!segment||segment.unitId!==booking.unitId||segment.end!==booking.departure||d.date<segment.start||d.date>=segment.end)throw new Error('Transfer date must be within the current stay')
+   const today=this.today();if(d.date<=today)this.assertPhysicallyAvailable(d.unitId,d.bookingId,today)
    if(d.date===segment.start)this.db.prepare('UPDATE booking_unit_segments SET unit_id=? WHERE id=?').run(d.unitId,segment.id)
    else{this.db.prepare('UPDATE booking_unit_segments SET end_date=? WHERE id=?').run(d.date,segment.id);this.db.prepare('INSERT INTO booking_unit_segments(booking_id,unit_id,start_date,end_date) VALUES (?,?,?,?)').run(d.bookingId,d.unitId,d.date,segment.end)}
    this.db.prepare('UPDATE bookings SET unit_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(d.unitId,d.bookingId)
