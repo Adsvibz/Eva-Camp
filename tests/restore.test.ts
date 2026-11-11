@@ -34,3 +34,7 @@ it('rejects a backup when encrypted identity history cannot be recovered on this
  const dir=mkdtempSync(join(tmpdir(),'eva-history-'));const source=join(dir,'backup.sqlite'),pending=join(dir,'pending.sqlite')
  try{const db=new Database(source);db.exec(schema);db.prepare('INSERT INTO audit_log(actor,action,entity_type,entity_id,detail_json) VALUES (?,?,?,?,?)').run('operator','identity-change','primary','1',JSON.stringify({before:Buffer.from('old-key').toString('base64'),after:null}));db.close();await expect(stageRestore(source,pending,()=>false)).rejects.toThrow('encrypted identities');expect(existsSync(pending)).toBe(false)}finally{rmSync(dir,{recursive:true,force:true})}
 })
+it('rejects a backup with broken foreign keys without leaving a staged file',async()=>{
+ const dir=mkdtempSync(join(tmpdir(),'eva-restore-fk-'));const source=join(dir,'backup.sqlite'),pending=join(dir,'pending.sqlite')
+ try{const db=new Database(source);db.exec(schema);db.pragma('foreign_keys = OFF');db.prepare('INSERT INTO additional_guests(booking_id,full_name) VALUES (?,?)').run(999,'Orphan');db.close();await expect(stageRestore(source,pending,()=>true)).rejects.toThrow('foreign keys');expect(existsSync(pending)).toBe(false)}finally{rmSync(dir,{recursive:true,force:true})}
+})

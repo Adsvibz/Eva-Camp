@@ -14,7 +14,7 @@ export async function createVerifiedBackup(db:Database.Database,directory:string
  try {
   await db.backup(temporary)
   const snapshot=new Database(temporary,{readonly:true,fileMustExist:true})
-  try {if(snapshot.pragma('integrity_check',{simple:true})!=='ok')throw new Error('Backup integrity check failed');const version=snapshot.prepare('SELECT MAX(version) AS version FROM schema_migrations').get() as {version:number};if(![1,2,3].includes(version.version))throw new Error('Unsupported backup schema')}
+  try {if(snapshot.pragma('integrity_check',{simple:true})!=='ok')throw new Error('Backup integrity check failed');if((snapshot.pragma('foreign_key_check') as unknown[]).length)throw new Error('Backup foreign keys are invalid');const version=snapshot.prepare('SELECT MAX(version) AS version FROM schema_migrations').get() as {version:number};if(![1,2,3].includes(version.version))throw new Error('Unsupported backup schema')}
   finally{snapshot.close()}
   renameSync(temporary,destination)
   const files=readdirSync(directory).filter(name=>/^eva-camp-\d{4}-\d{2}-\d{2}\.sqlite$/.test(name)).sort().reverse()
@@ -30,7 +30,7 @@ export async function createManualBackup(db:Database.Database,destination:string
  try {
   await db.backup(temporary)
   const snapshot=new Database(temporary,{readonly:true,fileMustExist:true})
-  try{if(snapshot.pragma('integrity_check',{simple:true})!=='ok')throw new Error('Backup integrity check failed');const version=snapshot.prepare('SELECT MAX(version) AS version FROM schema_migrations').get() as {version:number};if(![1,2,3].includes(version.version))throw new Error('Unsupported backup schema')}
+  try{if(snapshot.pragma('integrity_check',{simple:true})!=='ok')throw new Error('Backup integrity check failed');if((snapshot.pragma('foreign_key_check') as unknown[]).length)throw new Error('Backup foreign keys are invalid');const version=snapshot.prepare('SELECT MAX(version) AS version FROM schema_migrations').get() as {version:number};if(![1,2,3].includes(version.version))throw new Error('Unsupported backup schema')}
   finally{snapshot.close()}
   if(existsSync(destination))throw new Error('Backup destination already exists')
   renameSync(temporary,destination)

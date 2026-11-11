@@ -24,6 +24,8 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
       - name: Exercise the real Electron reception workflow
         run: npm run test:e2e
+      - name: Exercise Windows backup and restore
+        run: node tests/backup.e2e.cjs
       - name: Upload UI and print verification artifacts
         if: always()
         uses: actions/upload-artifact@v4

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Reject backup snapshots and restores with broken foreign-key relationships, preserving existing backup files. Add Windows end-to-end coverage for manual and portable backup recovery.
+
 - Add a database-backed bilingual front-desk dashboard with arrival and departure lists, occupancy, unit states, net collections and outstanding balances.
 
 - Add persisted English/Arabic and light/dark/system preferences, with Cairo and Noto Serif fonts bundled locally.
