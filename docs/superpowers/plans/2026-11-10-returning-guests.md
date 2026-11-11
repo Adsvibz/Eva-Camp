@@ -12,6 +12,6 @@ Reference lock: preserve the existing Eva Camp monochrome modal, typography, fie
 - [x] Add migration 3, normalization helper and shared contracts; support schema 3 in both backup formats and startup upgrades.
 - [x] Implement guest search, exact duplicate suggestions and paginated history. Add optional guestId and allowSharedPhone to booking creation. Maintain the phone index when editing a profile.
 - [x] Expose validated IPC methods, build returning-guest selector and history panel, and make linked-profile editing semantics explicit.
-- [ ] Run complete tests, TypeScript and production build, attempt UI testing, update documentation, push and verify Windows packaging.
+- [x] Run complete tests, TypeScript and production build, attempt UI testing, update documentation, push and verify Windows packaging.
 
 Review focus: shared family numbers must not merge people; stale guest selection must not overwrite a profile; conflict failures must leave no orphan guest or consumed booking reference; older backups must migrate correctly; history must have a way to reach records beyond the first page.
