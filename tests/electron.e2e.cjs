@@ -107,7 +107,7 @@ async function booking(arrival,departure){
  await page.getByLabel('Service',{exact:true}).selectOption('meals');await page.getByLabel('Quantity',{exact:true}).fill('2');await page.getByLabel('Price each (EGP)',{exact:true}).fill('100');await page.getByRole('button',{name:'Add service',exact:true}).click()
  await page.waitForFunction(async id=>(await window.eva.getBooking(id)).extrasPiasters===20000,first.id)
  let withExtras=await page.evaluate(id=>window.eva.getBooking(id),first.id);assert.equal(withExtras.totalDuePiasters,120000);assert.equal(withExtras.balancePiasters,95000)
- await page.getByRole('button',{name:'Remove',exact:true}).last().click();await page.getByRole('button',{name:'Undo removal',exact:true}).waitFor();await page.getByRole('button',{name:'Undo removal',exact:true}).click();await page.waitForFunction(async id=>(await window.eva.getBooking(id)).extrasPiasters===20000,first.id)
+ await page.locator('.extras').getByRole('button',{name:'Remove',exact:true}).click();await page.locator('.extras').getByRole('button',{name:'Undo removal',exact:true}).waitFor();await page.locator('.extras').getByRole('button',{name:'Undo removal',exact:true}).click();await page.waitForFunction(async id=>(await window.eva.getBooking(id)).extrasPiasters===20000,first.id)
  await preview(()=>page.getByRole('button',{name:'Registration form',exact:true}).click(),'registration-extras','1200.00')
  await closeModal()
  await booking('2026-11-15','2026-11-17')
