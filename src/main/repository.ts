@@ -1,4 +1,5 @@
 import {dashboardSummary} from './dashboard'
+import {addExtraSchema,extraRefSchema,type AddExtraInput,type ExtraRef,type BookingExtra} from '../shared/contracts'
 import {uiPreferencesSchema, type UiPreferences} from '../shared/contracts'
 import { GuestDirectory } from './guests'
 import { normalizePhone } from '../shared/phone'
@@ -96,13 +97,24 @@ export class CampRepository {
   return {...rest,idNumber:unseal(idCipher),companions:others.map(g=>({fullName:g.fullName,idNumber:unseal(g.idCipher)}))}
  }
  getBooking(id:number):BookingDetail|null {
-  const row=this.db.prepare(`SELECT b.id,b.guest_id AS guestId,b.unit_id AS unitId,b.booking_reference AS reference,g.full_name AS fullName,g.nationality,g.email,g.date_of_birth AS dateOfBirth,g.country,g.home_address AS address,g.notes,(g.id_passport_ciphertext IS NOT NULL) AS hasPrimaryId,COALESCE(g.mobile_whatsapp,'') AS phone,b.adults_count AS adults,b.children_count AS children,b.source,u.name AS unitName,b.arrival_date AS arrival,b.departure_date AS departure,b.status,v.total_piasters AS totalPiasters,v.paid_piasters AS paidPiasters,v.balance_piasters AS balancePiasters FROM bookings b JOIN guests g ON g.id=b.guest_id JOIN units u ON u.id=b.unit_id JOIN booking_balances v ON v.booking_id=b.id WHERE b.id=? AND b.deleted_at IS NULL`).get(id) as Omit<BookingDetail,'companions'>|undefined
+  const row=this.db.prepare(`SELECT b.id,b.guest_id AS guestId,b.unit_id AS unitId,b.booking_reference AS reference,g.full_name AS fullName,g.nationality,g.email,g.date_of_birth AS dateOfBirth,g.country,g.home_address AS address,g.notes,(g.id_passport_ciphertext IS NOT NULL) AS hasPrimaryId,COALESCE(g.mobile_whatsapp,'') AS phone,b.adults_count AS adults,b.children_count AS children,b.source,u.name AS unitName,b.arrival_date AS arrival,b.departure_date AS departure,b.status,v.total_piasters AS totalPiasters,v.discount_piasters AS discountPiasters,v.extras_piasters AS extrasPiasters,v.total_piasters-v.discount_piasters+v.extras_piasters AS totalDuePiasters,v.paid_piasters AS paidPiasters,v.balance_piasters AS balancePiasters FROM bookings b JOIN guests g ON g.id=b.guest_id JOIN units u ON u.id=b.unit_id JOIN booking_balances v ON v.booking_id=b.id WHERE b.id=? AND b.deleted_at IS NULL`).get(id) as Omit<BookingDetail,'companions'>|undefined
   if(!row)return null
   const companions=this.db.prepare('SELECT id,full_name AS fullName,(id_passport_ciphertext IS NOT NULL) AS hasId FROM additional_guests WHERE booking_id=? AND deleted_at IS NULL ORDER BY id').all(id) as {id:number;fullName:string;hasId:boolean}[]
   return {...row,companions}
  }
 
 
+ listExtras(bookingId:number):BookingExtra[]{
+  extraRefSchema.shape.bookingId.parse(bookingId)
+  return this.db.prepare('SELECT e.id,e.description,e.quantity,e.unit_price_piasters AS unitPricePiasters FROM booking_extras e JOIN bookings b ON b.id=e.booking_id WHERE e.booking_id=? AND e.deleted_at IS NULL AND b.deleted_at IS NULL ORDER BY e.id').all(bookingId) as BookingExtra[]
+ }
+ private assertExtraTotal(bookingId:number,additional:number):void{
+  const row=this.db.prepare('SELECT total_piasters-discount_piasters+extras_piasters AS total FROM booking_balances WHERE booking_id=?').get(bookingId) as {total:number}|undefined
+  if(!row||!Number.isSafeInteger(row.total)||!Number.isSafeInteger(additional)||row.total>Number.MAX_SAFE_INTEGER-additional)throw new Error('EXTRA_AMOUNT_TOO_LARGE')
+ }
+ addExtra(input:AddExtraInput):number{const d=addExtraSchema.parse(input);return this.db.transaction(()=>{this.activeBooking(d.bookingId);this.assertExtraTotal(d.bookingId,d.quantity*d.unitPricePiasters);const id=Number(this.db.prepare('INSERT INTO booking_extras(booking_id,description,quantity,unit_price_piasters) VALUES (?,?,?,?)').run(d.bookingId,d.description,d.quantity,d.unitPricePiasters).lastInsertRowid);this.audit('create','extra',id);return id})()}
+ removeExtra(input:ExtraRef):void{const d=extraRefSchema.parse(input);this.db.transaction(()=>{this.activeBooking(d.bookingId);const result=this.db.prepare('UPDATE booking_extras SET deleted_at=CURRENT_TIMESTAMP WHERE id=? AND booking_id=? AND deleted_at IS NULL').run(d.extraId,d.bookingId);if(!result.changes)throw new Error('EXTRA_UNAVAILABLE');this.audit('remove','extra',d.extraId)})()}
+ restoreExtra(input:ExtraRef):void{const d=extraRefSchema.parse(input);this.db.transaction(()=>{this.activeBooking(d.bookingId);const row=this.db.prepare('SELECT quantity,unit_price_piasters AS price FROM booking_extras WHERE id=? AND booking_id=? AND deleted_at IS NOT NULL').get(d.extraId,d.bookingId) as {quantity:number;price:number}|undefined;if(!row)throw new Error('EXTRA_UNAVAILABLE');this.assertExtraTotal(d.bookingId,row.quantity*row.price);this.db.prepare('UPDATE booking_extras SET deleted_at=NULL WHERE id=? AND booking_id=?').run(d.extraId,d.bookingId);this.audit('restore','extra',d.extraId)})()}
  private activeBooking(bookingId:number):{guestId:number}{
   const b=this.db.prepare("SELECT guest_id AS guestId FROM bookings WHERE id=? AND deleted_at IS NULL AND status IN ('reserved','checked-in')").get(bookingId) as {guestId:number}|undefined
   if(!b)throw new Error('Booking unavailable')
@@ -154,6 +166,8 @@ export class CampRepository {
    if(!row||!['reserved','checked-in'].includes(row.status))throw new Error('Booking cannot be edited')
    if(d.adults+d.children>row.capacity)throw new Error('Unit capacity exceeded')
    if(d.totalPiasters<row.discountPiasters)throw new Error('Total cannot be less than discount')
+   const extras=(this.db.prepare('SELECT extras_piasters AS amount FROM booking_balances WHERE booking_id=?').get(d.bookingId) as {amount:number}).amount
+   if(!Number.isSafeInteger(extras)||BigInt(d.totalPiasters)-BigInt(row.discountPiasters)+BigInt(extras)>BigInt(Number.MAX_SAFE_INTEGER))throw new Error('EXTRA_AMOUNT_TOO_LARGE')
    const beforeGuest=this.db.prepare("SELECT full_name AS fullName,COALESCE(mobile_whatsapp,'') AS phone,COALESCE(nationality,'') AS nationality,COALESCE(email,'') AS email,COALESCE(date_of_birth,'') AS dateOfBirth,COALESCE(country,'') AS country,COALESCE(home_address,'') AS address,COALESCE(notes,'') AS notes FROM guests WHERE id=?").get(row.guestId) as Record<string,string>
    const guestFields=['fullName','phone','nationality','email','dateOfBirth','country','address','notes'] as const
    const changedGuestFields=guestFields.filter(key=>beforeGuest[key] !== (d[key]||''))

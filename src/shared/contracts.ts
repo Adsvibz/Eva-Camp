@@ -10,7 +10,7 @@ export type BookingRow = {id:number;reference:string;fullName:string;unitName:st
 export type UnitRow = {id:number;name:string;type:string;capacity:number;pricePiasters:number}
 
 export const statusSchema = z.object({bookingId:z.number().int().positive(),status:z.enum(['reserved','checked-in','checked-out','cancelled'])})
-export type BookingDetail = BookingRow & {guestId:number;unitId:number;nationality:string|null;email:string|null;dateOfBirth:string|null;country:string|null;address:string|null;notes:string|null;phone:string;adults:number;children:number;source:'walk-in'|'phone'|'whatsapp'|'agency';hasPrimaryId:boolean;companions:{id:number;fullName:string;hasId:boolean}[]}
+export type BookingDetail = BookingRow & {discountPiasters:number;extrasPiasters:number;totalDuePiasters:number;guestId:number;unitId:number;nationality:string|null;email:string|null;dateOfBirth:string|null;country:string|null;address:string|null;notes:string|null;phone:string;adults:number;children:number;source:'walk-in'|'phone'|'whatsapp'|'agency';hasPrimaryId:boolean;companions:{id:number;fullName:string;hasId:boolean}[]}
 
 export type DailyReport = {date:string;cash:number;card:number;transfer:number;gross:number;refunds:number;net:number;count:number;closed:boolean}
 export const calendarRangeSchema=z.object({start:date,end:date}).refine(v=>v.start<v.end&&new Date(v.end).valueOf()-new Date(v.start).valueOf()<=62*86400000,{message:'Invalid calendar range'})
@@ -47,3 +47,9 @@ export type UiPreferences=z.infer<typeof uiPreferencesSchema>
 
 export type DashboardStay={id:number;reference:string;fullName:string;unitName:string;status:'reserved'|'checked-in';arrival:string;departure:string}
 export type DashboardSummary={day:string;totalUnits:number;occupiedUnits:number;occupancyPercent:number;inHouseBookings:number;inHouseGuests:number;arrivalsCount:number;departuresCount:number;todayCollectionsPiasters:number;monthCollectionsPiasters:number;outstandingPiasters:number;unitStatuses:{available:number;reserved:number;occupied:number;cleaning:number;maintenance:number};arrivals:DashboardStay[];departures:DashboardStay[]}
+
+export const addExtraSchema=z.object({bookingId:z.number().int().positive().safe(),description:z.string().trim().min(1).max(120),quantity:z.number().int().min(1).max(10000),unitPricePiasters:z.number().int().min(0).safe()}).refine(v=>Number.isSafeInteger(v.quantity*v.unitPricePiasters),{message:'Amount is too large'})
+export const extraRefSchema=z.object({bookingId:z.number().int().positive().safe(),extraId:z.number().int().positive().safe()})
+export type AddExtraInput=z.infer<typeof addExtraSchema>
+export type ExtraRef=z.infer<typeof extraRefSchema>
+export type BookingExtra={id:number;description:string;quantity:number;unitPricePiasters:number}

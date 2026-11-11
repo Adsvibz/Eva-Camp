@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add itemized services and extras to active bookings, with audited removal and undo, balance calculations and backup coverage.
+
 - Add optional application PIN with salted scrypt verification, persistent attempt delays, launch locking, and main-process access checks.
 
 - Prevent check-ins and immediate transfers into physically occupied rooms, including early arrivals and overdue departures; reject check-ins to cleaning or maintenance units.

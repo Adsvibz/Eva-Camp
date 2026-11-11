@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto'
 import { readFileSync, writeFileSync, existsSync, rmSync, mkdirSync, statSync } from 'node:fs'
 import Database from 'better-sqlite3'
 import { CampRepository } from './repository'
+import {addExtraSchema,extraRefSchema} from '../shared/contracts'
 import { AppLock } from './lock'
 import { registrationHtml, receiptHtml, closingHtml } from './print'
 import { managementReportHtml, reportCsv } from './reports'
@@ -110,6 +111,10 @@ app.whenReady().then(()=>{
   handle('units:create',(_event,data:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');return repository.createUnit(unitSchema.parse(data))})
   handle('identity:replace',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');return repository.replaceIdentity(replaceIdentitySchema.parse(raw))})
   handle('identity:undo',(_event,id:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');repository.undoIdentity(statusSchema.shape.bookingId.parse(id))})
+  handle('extras:list',(_event,id:unknown)=>repository.listExtras(statusSchema.shape.bookingId.parse(id)))
+  handle('extras:add',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');return repository.addExtra(addExtraSchema.parse(raw))})
+  handle('extras:remove',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');repository.removeExtra(extraRefSchema.parse(raw))})
+  handle('extras:restore',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');repository.restoreExtra(extraRefSchema.parse(raw))})
   handle('companions:add',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');return repository.addCompanion(addCompanionSchema.parse(raw))})
   handle('companions:update',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');repository.updateCompanion(updateCompanionSchema.parse(raw))})
   handle('companions:remove',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');const d=companionRefSchema.parse(raw);repository.removeCompanion(d.bookingId,d.companionId)})
