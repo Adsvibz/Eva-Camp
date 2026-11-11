@@ -1,4 +1,5 @@
 import {dashboardSummary} from './dashboard'
+import {updateUnitSchema,type UpdateUnitInput} from '../shared/contracts'
 import type {InvoiceData} from './invoice'
 import {addExtraSchema,extraRefSchema,type AddExtraInput,type ExtraRef,type BookingExtra} from '../shared/contracts'
 import {uiPreferencesSchema, type UiPreferences} from '../shared/contracts'
@@ -57,7 +58,17 @@ export class CampRepository {
   return (this.db.prepare('SELECT value FROM sequences WHERE name=? AND year=?').get(name,year) as {value:number}).value
  }
  createUnit(data:UnitInput):number { const d=unitSchema.parse(data); return this.db.transaction(()=>{ const id=Number(this.db.prepare('INSERT INTO units(name,type,capacity,base_price_piasters) VALUES (?,?,?,?)').run(d.name,d.type,d.capacity,d.pricePiasters).lastInsertRowid); this.audit('create','unit',id); return id })() }
- listUnits():UnitRow[] { return this.db.prepare("SELECT id,name,type,capacity,base_price_piasters AS pricePiasters FROM units WHERE deleted_at IS NULL ORDER BY name COLLATE NOCASE").all() as UnitRow[] }
+ listUnits():UnitRow[] { return this.db.prepare("SELECT id,name,type,capacity,base_price_piasters AS pricePiasters,housekeeping_status AS housekeepingStatus,COALESCE(notes,'') AS notes FROM units WHERE deleted_at IS NULL ORDER BY name COLLATE NOCASE").all() as UnitRow[] }
+ updateUnit(input:UpdateUnitInput):void{const d=updateUnitSchema.parse(input);this.db.transaction(()=>{
+  const existing=this.db.prepare("SELECT name,type,capacity,base_price_piasters AS pricePiasters,housekeeping_status AS housekeepingStatus,COALESCE(notes,'') AS notes FROM units WHERE id=? AND deleted_at IS NULL").get(d.id) as {name:string;type:string;capacity:number;pricePiasters:number;housekeepingStatus:string;notes:string}|undefined;if(!existing)throw new Error('UNIT_UNAVAILABLE')
+  const day=this.today();date.parse(day)
+  const future=this.db.prepare(`SELECT b.id FROM bookings b WHERE b.deleted_at IS NULL AND b.status IN ('reserved','checked-in') AND b.adults_count+b.children_count>? AND EXISTS (SELECT 1 FROM booking_unit_segments s WHERE s.booking_id=b.id AND s.unit_id=? AND (b.status='reserved' OR s.end_date>?)) LIMIT 1`).get(d.capacity,d.id,day)
+  const checkedIn=this.db.prepare("SELECT id FROM bookings WHERE deleted_at IS NULL AND status='checked-in' AND adults_count+children_count>?").all(d.capacity) as {id:number}[]
+  if(future||checkedIn.some(b=>this.effectiveUnit(b.id,day)===d.id))throw new Error('UNIT_CAPACITY_CONFLICT')
+  this.db.prepare('UPDATE units SET name=?,type=?,capacity=?,base_price_piasters=?,housekeeping_status=?,notes=? WHERE id=? AND deleted_at IS NULL').run(d.name,d.type,d.capacity,d.pricePiasters,d.housekeepingStatus,d.notes||null,d.id)
+  const {notes,...before}=existing;const after={name:d.name,type:d.type,capacity:d.capacity,pricePiasters:d.pricePiasters,housekeepingStatus:d.housekeepingStatus}
+  this.db.prepare('INSERT INTO audit_log(actor,action,entity_type,entity_id,detail_json) VALUES (?,?,?,?,?)').run('operator','update','unit',String(d.id),JSON.stringify({before,after,notesChanged:notes!==d.notes}))
+ })() }
  createBooking(data:BookingInput):{id:number;reference:string} { const d=bookingSchema.parse(data); return this.db.transaction(()=>{
   const unit=this.db.prepare("SELECT capacity FROM units WHERE id=? AND deleted_at IS NULL AND housekeeping_status='available'").get(d.unitId) as {capacity:number}|undefined
   if(!unit) throw new Error('Unit unavailable')

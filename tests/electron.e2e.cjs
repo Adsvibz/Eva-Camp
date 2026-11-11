@@ -78,6 +78,12 @@ async function booking(arrival,departure){
   await fill('name',unit);await fill('type','Room');await fill('capacity','3');await fill('price','500');await save()
   await page.locator('.overlay').waitFor({state:'hidden'})
  }
+ await page.getByRole('button',{name:'Edit unit: B',exact:true}).click()
+ await page.getByLabel('Housekeeping status',{exact:true}).selectOption('cleaning');await page.getByLabel('Notes',{exact:true}).fill('Test cleaning');await page.getByRole('button',{name:'Save changes',exact:true}).click();await page.locator('.overlay').waitFor({state:'hidden'})
+ let unitB=(await page.evaluate(()=>window.eva.listUnits())).find(x=>x.name==='B');assert.equal(unitB.housekeepingStatus,'cleaning');assert.equal(unitB.notes,'Test cleaning')
+ const rejected=await page.evaluate(async unitId=>{try{await window.eva.createBooking({fullName:'Unavailable',phone:'',unitId,arrival:'2026-12-01',departure:'2026-12-02',adults:1,children:0,totalPiasters:0,source:'phone'});return false}catch(e){return String(e).includes('Unit unavailable')}},unitB.id);assert.equal(rejected,true)
+ await page.getByRole('button',{name:'Edit unit: B',exact:true}).click();await page.getByLabel('Housekeeping status',{exact:true}).selectOption('available');await page.getByRole('button',{name:'Save changes',exact:true}).click();await page.locator('.overlay').waitFor({state:'hidden'})
+ unitB=(await page.evaluate(()=>window.eva.listUnits())).find(x=>x.name==='B');assert.equal(unitB.housekeepingStatus,'available')
  await page.locator('nav').getByRole('button',{name:'Overview',exact:true}).click()
  await booking(day,'2026-11-14')
  await fill('name',name);await fill('phone','٠١٢٢٠٧٥٥٧٥٥');await fill('nationality','Egyptian');await fill('idNumber','E2E-PRIMARY')

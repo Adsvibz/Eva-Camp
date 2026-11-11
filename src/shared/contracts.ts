@@ -7,7 +7,9 @@ export type UnitInput = z.infer<typeof unitSchema>
 export type BookingInput = z.infer<typeof bookingSchema>
 export type PaymentInput = z.infer<typeof paymentSchema>
 export type BookingRow = {id:number;reference:string;fullName:string;unitName:string;arrival:string;departure:string;status:string;totalPiasters:number;paidPiasters:number;balancePiasters:number}
-export type UnitRow = {id:number;name:string;type:string;capacity:number;pricePiasters:number}
+export const updateUnitSchema=unitSchema.extend({id:z.number().int().positive().safe(),housekeepingStatus:z.enum(['available','cleaning','maintenance']),notes:z.string().trim().max(2000)})
+export type UpdateUnitInput=z.infer<typeof updateUnitSchema>
+export type UnitRow = {id:number;name:string;type:string;capacity:number;pricePiasters:number;housekeepingStatus:'available'|'cleaning'|'maintenance';notes:string}
 
 export const statusSchema = z.object({bookingId:z.number().int().positive(),status:z.enum(['reserved','checked-in','checked-out','cancelled'])})
 export type BookingDetail = BookingRow & {discountPiasters:number;extrasPiasters:number;totalDuePiasters:number;guestId:number;unitId:number;nationality:string|null;email:string|null;dateOfBirth:string|null;country:string|null;address:string|null;notes:string|null;phone:string;adults:number;children:number;source:'walk-in'|'phone'|'whatsapp'|'agency';hasPrimaryId:boolean;companions:{id:number;fullName:string;hasId:boolean}[]}

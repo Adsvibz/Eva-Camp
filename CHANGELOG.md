@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add unit editing and housekeeping status controls, capacity safeguards, and audit details.
+
 - Add bilingual itemized booking statements with accommodation, services, payments, refunds and balances, printable or exportable to PDF.
 
 - Add itemized services and extras to active bookings, with audited removal and undo, balance calculations and backup coverage.
