@@ -22,6 +22,7 @@ async function preview(action,filename,text,minimumPages=1){
  await window.waitForURL('evaprint://preview/**')
  await window.waitForLoadState('domcontentloaded')
  await window.evaluate(()=>document.fonts.ready)
+ if(filename.startsWith('invoice')){const widths=await window.evaluate(()=>({page:document.documentElement.scrollWidth,viewport:document.documentElement.clientWidth}));assert.ok(widths.page<=widths.viewport,`Invoice preview overflows horizontally: ${JSON.stringify(widths)}`)}
  assert.ok((await window.locator('body').innerText()).includes(text))
  const url=window.url()
  const encoded=await app.evaluate(async({BrowserWindow},url)=>{
