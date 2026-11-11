@@ -60,4 +60,4 @@ Both Windows workflows now run this check before uploading executables or drafti
 
 ## Dependency security
 
-Electron, electron-builder and Vitest were updated to address the high and critical advisories reported by npm on 11 November 2026. The full audit still reported six moderate findings in the build-time electron-builder/minimatch dependency chain. An npm audit is a point-in-time dependency check and is not a security review of the application. Windows CI rejects builds when npm reports high or critical advisories.
+Electron, better-sqlite3, electron-builder and Vitest were updated to address the high and critical advisories reported by npm on 11 November 2026. The full audit still reported six moderate findings in the build-time electron-builder/minimatch dependency chain. An npm audit is a point-in-time dependency check and is not a security review of the application. Windows CI rejects builds when npm reports high or critical advisories.

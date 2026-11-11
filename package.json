@@ -13,7 +13,7 @@
     "test:e2e": "node tests/electron.e2e.cjs"
   },
   "dependencies": {
-    "better-sqlite3": "^11.10.0",
+    "better-sqlite3": "13.0.3",
     "drizzle-orm": "0.45.4",
     "lucide-react": "^0.468.0",
     "react": "^18.3.1",
