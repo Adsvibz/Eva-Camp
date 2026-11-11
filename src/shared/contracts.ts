@@ -41,3 +41,6 @@ export type GuestProfile={id:number;fullName:string;phone:string;nationality:str
 export const guestHistorySchema=z.object({guestId:z.number().int().positive(),offset:z.number().int().min(0).max(1000000).default(0)})
 export type GuestHistoryInput=z.input<typeof guestHistorySchema>
 export type GuestHistoryPage={rows:BookingRow[];hasMore:boolean}
+
+export const uiPreferencesSchema=z.object({language:z.enum(['en','ar']),theme:z.enum(['light','dark','system'])}).strict()
+export type UiPreferences=z.infer<typeof uiPreferencesSchema>

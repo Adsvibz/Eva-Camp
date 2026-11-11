@@ -9,7 +9,7 @@ import { managementReportHtml, reportCsv } from './reports'
 import { createVerifiedBackup, createManualBackup } from './backup'
 import { stageRestore, applyStagedRestore } from './restore'
 import { createPortableArchive, stagePortableRestore } from './portable'
-import { bookingSchema, paymentSchema, unitSchema, statusSchema, date, calendarRangeSchema, rescheduleSchema, searchSchema, bookingDetailsSchema, reportRangeSchema, replaceIdentitySchema, addCompanionSchema, updateCompanionSchema, companionRefSchema, portablePasswordSchema, transferSchema, guestHistorySchema } from '../shared/contracts'
+import { bookingSchema, paymentSchema, unitSchema, statusSchema, date, calendarRangeSchema, rescheduleSchema, searchSchema, bookingDetailsSchema, reportRangeSchema, replaceIdentitySchema, addCompanionSchema, updateCompanionSchema, companionRefSchema, portablePasswordSchema, transferSchema, guestHistorySchema, uiPreferencesSchema } from '../shared/contracts'
 
 protocol.registerSchemesAsPrivileged([{scheme:'evaprint',privileges:{standard:true,secure:true}}])
 const printPages=new Map<string,string>()
@@ -99,6 +99,8 @@ app.whenReady().then(()=>{
   ipcMain.handle('companions:remove',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');const d=companionRefSchema.parse(raw);repository.removeCompanion(d.bookingId,d.companionId)})
   ipcMain.handle('companions:restore',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');const d=companionRefSchema.parse(raw);repository.restoreCompanion(d.bookingId,d.companionId)})
   ipcMain.handle('bookings:update-details',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');repository.updateBookingDetails(bookingDetailsSchema.parse(raw))})
+  ipcMain.handle('preferences:get',()=>repository.getPreferences())
+  ipcMain.handle('preferences:save',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');repository.savePreferences(uiPreferencesSchema.parse(raw))})
   ipcMain.handle('guests:find',(_event,query:unknown)=>repository.findGuests(searchSchema.parse(query)))
   ipcMain.handle('guests:duplicates',(_event,phone:unknown)=>repository.duplicateGuests(searchSchema.parse(phone)))
   ipcMain.handle('guests:history',(_event,raw:unknown)=>repository.guestHistory(guestHistorySchema.parse(raw)))

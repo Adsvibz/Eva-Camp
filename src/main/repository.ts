@@ -1,3 +1,4 @@
+import {uiPreferencesSchema, type UiPreferences} from '../shared/contracts'
 import { GuestDirectory } from './guests'
 import { normalizePhone } from '../shared/phone'
 import type { GuestHistoryInput } from '../shared/contracts'
@@ -10,6 +11,20 @@ export class CampRepository {
  findGuests(query:string){return new GuestDirectory(this.db).find(query)}
  duplicateGuests(phone:string){return new GuestDirectory(this.db).matchPhone(phone)}
  guestHistory(input:GuestHistoryInput){return new GuestDirectory(this.db).history(input)}
+ getPreferences():UiPreferences{
+  const row=this.db.prepare("SELECT value_json AS value FROM settings WHERE key='ui:preferences'").get() as {value:string}|undefined
+  if(row){try{const result=uiPreferencesSchema.safeParse(JSON.parse(row.value));if(result.success)return result.data}catch{}}
+  return {language:'en',theme:'light'}
+ }
+ savePreferences(input:UiPreferences):void{
+  const d=uiPreferencesSchema.parse(input)
+  this.db.transaction(()=>{
+   const row=this.db.prepare("SELECT value_json AS value FROM settings WHERE key='ui:preferences'").get() as {value:string}|undefined
+   if(row){try{const previous=uiPreferencesSchema.safeParse(JSON.parse(row.value));if(previous.success&&previous.data.language===d.language&&previous.data.theme===d.theme)return}catch{}}
+   this.db.prepare("INSERT INTO settings(key,value_json) VALUES ('ui:preferences',?) ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json").run(JSON.stringify(d))
+   this.audit('preferences-update','settings','ui:preferences')
+  })()
+ }
  private audit(action:string,entity:string,id:number|string) { this.db.prepare('INSERT INTO audit_log(actor,action,entity_type,entity_id) VALUES (?,?,?,?)').run('operator',action,entity,String(id)) }
  private sequence(name:string,year:number):number {
   this.db.prepare('INSERT INTO sequences(name,year,value) VALUES (?,?,1) ON CONFLICT(name,year) DO UPDATE SET value=value+1').run(name,year)
