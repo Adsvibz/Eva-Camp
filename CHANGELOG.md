@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Exercise the unpacked packaged Windows executable, its bundled SQLite module and print template in CI.
+
 - Upgrade Electron to 45.3.0, better-sqlite3 to 13.0.3, electron-builder to 26.18.0 and Vitest to 5.1.0; run a high-severity dependency audit and assert the Electron version in Windows CI.
 
 - Name the room-transfer selector for assistive technology and add an Arabic operating guide.
