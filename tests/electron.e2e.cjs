@@ -100,7 +100,7 @@ async function booking(arrival,departure){
  await page.locator('select[name="unit"]').selectOption({label:'A'})
  await fill('arrival','2026-11-11');await fill('departure','2026-11-12')
  await page.getByText('The selected unit is unavailable for these dates or guest count. Choose another unit.').waitFor()
- assert.equal(await page.locator('select[name="unit"] option').filter({hasText:'A · Booked for these dates'}).isDisabled(),true)
+ assert.equal(await page.locator('select[name="unit"] option').filter({hasText:'A · Booked for these dates'}).evaluate(option=>option.disabled),true)
  assert.equal(await page.locator('.dialog > form > .form-actions .primary').isDisabled(),true)
  await page.locator('select[name="unit"]').selectOption({label:'B'})
  await page.waitForFunction(()=>!document.querySelector('.dialog > form > .form-actions .primary')?.disabled)
