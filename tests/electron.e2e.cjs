@@ -118,6 +118,8 @@ async function booking(arrival,departure){
  // Reception can take a partial payment from booking details without leaving the guest.
  await page.locator('.dialog').getByRole('button',{name:'Record payment',exact:true}).click()
  assert.ok((await page.locator('.payment-context').innerText()).includes(name))
+ const paymentBounds=await page.locator('.dialog').evaluate(dialog=>{const a=dialog.getBoundingClientRect(),b=dialog.querySelector('.payment-form .form-actions .primary').getBoundingClientRect();return {dialogTop:a.top,dialogBottom:a.bottom,buttonTop:b.top,buttonBottom:b.bottom}})
+ assert.ok(paymentBounds.buttonTop>=paymentBounds.dialogTop&&paymentBounds.buttonBottom<=paymentBounds.dialogBottom,`Payment save button is clipped: ${JSON.stringify(paymentBounds)}`)
  await page.locator('.dialog').screenshot({path:path.join(artifacts,'payment-details-en.png')})
  assert.equal(await page.getByRole('dialog').count(),1)
  await page.locator('.dialog .form-actions .primary').focus();await page.keyboard.press('Tab');assert.equal(await page.evaluate(()=>document.activeElement?.getAttribute('aria-label')),'Close')
@@ -241,6 +243,8 @@ async function booking(arrival,departure){
  await page.getByRole('button',{name,exact:true}).first().click()
  await page.locator('.dialog').getByRole('button',{name:'تسجيل دفعة',exact:true}).click()
  await page.getByLabel('المبلغ (ج.م)',{exact:true}).waitFor()
+ const paymentBoundsAr=await page.locator('.dialog').evaluate(dialog=>{const a=dialog.getBoundingClientRect(),b=dialog.querySelector('.payment-form .form-actions .primary').getBoundingClientRect();return {dialogTop:a.top,dialogBottom:a.bottom,buttonTop:b.top,buttonBottom:b.bottom}})
+ assert.ok(paymentBoundsAr.buttonTop>=paymentBoundsAr.dialogTop&&paymentBoundsAr.buttonBottom<=paymentBoundsAr.dialogBottom,`Arabic payment save button is clipped: ${JSON.stringify(paymentBoundsAr)}`)
  await page.locator('.dialog').screenshot({path:path.join(artifacts,'payment-details-ar.png')})
  await page.getByLabel('المبلغ (ج.م)',{exact:true}).fill('٢')
  acceptDialogs=false;await page.keyboard.press('Escape');await page.getByLabel('المبلغ (ج.م)',{exact:true}).waitFor();assert.equal(await page.getByLabel('المبلغ (ج.م)',{exact:true}).inputValue(),'٢')
