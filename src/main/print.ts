@@ -9,7 +9,10 @@ const companion=(name='',id='')=>`<div class="companion-line"><div class="line" 
 export function registrationHtml(data:RegistrationData|null,fonts?:{serif:string;serifBold:string;arabic:string;arabicBold:string},logoDataUrl?:string):string {
  const declaration=data?.declaration?.isCurrent?data.declaration:null
  const ink=declaration?.signature?signatureSchema.parse(declaration.signature):null
- const signedField=ink?`<div class="field"><div class="labels"><span>Guest signature</span><span lang="ar" dir="rtl">توقيع العميل</span></div><div class="line signature-line"><svg class="guest-signature" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 180">${signaturePaths(ink).map(d=>`<path d="${d}" fill="none" stroke="#171b19" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>`).join('')}</svg></div></div>`:field('Guest signature','توقيع العميل')
+ const points=ink?.flat()||[]
+ const x=points.map(point=>Math.round(point[0]*600)),y=points.map(point=>Math.round(point[1]*180))
+ const box=ink?`${Math.min(...x)-10} ${Math.min(...y)-10} ${Math.max(...x)-Math.min(...x)+20} ${Math.max(...y)-Math.min(...y)+20}`:''
+ const signedField=ink?`<div class="field"><div class="labels"><span>Guest signature</span><span lang="ar" dir="rtl">توقيع العميل</span></div><div class="line signature-line"><svg class="guest-signature" xmlns="http://www.w3.org/2000/svg" viewBox="${box}">${signaturePaths(ink).map(d=>`<path d="${d}" fill="none" stroke="#171b19" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>`).join('')}</svg></div></div>`:field('Guest signature','توقيع العميل')
  const d=data; const others=d?.companions||[];const first=Array.from({length:3},(_,i)=>companion(others[i]?.fullName,others[i]?.idNumber)).join('')
  const continuation=others.length>3?`<div class="continuation">${section('ADDITIONAL GUESTS — CONTINUED','العملاء المرافقون — تابع')}${others.slice(3).map(c=>companion(c.fullName,c.idNumber)).join('')}</div>`:''
  const fontCss=fonts?`@font-face{font-family:EvaSerif;src:url(data:font/ttf;base64,${fonts.serif})}@font-face{font-family:EvaSerif;src:url(data:font/ttf;base64,${fonts.serifBold});font-weight:700}@font-face{font-family:EvaArabic;src:url(data:font/ttf;base64,${fonts.arabic})}@font-face{font-family:EvaArabic;src:url(data:font/ttf;base64,${fonts.arabicBold});font-weight:700}`:''

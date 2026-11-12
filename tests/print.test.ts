@@ -24,3 +24,10 @@ it('renders the daily closing report with refunds and net collections',async()=>
  const {closingHtml}=await import('../src/main/print');const html=closingHtml({date:'2026-11-10',cash:25000,card:40000,transfer:0,gross:70000,refunds:5000,net:65000,count:3,closed:true})
  expect(html).toContain('DAILY CLOSING REPORT');expect(html).toContain('تقرير إغلاق اليوم');expect(html).toContain('650.00');expect(html).toContain('50.00')
 })
+
+it('fits the drawn signature to its ink bounds for legible printing',()=>{
+ const signed:RegistrationData={...item,declaration:{revision:1,isCurrent:true,confirmationText:'confirmed',receivedBy:'Staff',signedDate:'2026-11-10',signature:[[[0.1,0.7],[0.4,0.2],[0.8,0.6]]],hasPrevious:true}}
+ const html=registrationHtml(signed)
+ expect(html).toContain('viewBox="50 26 440 110"')
+ expect(html).toContain('stroke-width="8"')
+})
