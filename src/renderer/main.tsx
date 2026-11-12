@@ -32,7 +32,7 @@ function App({onLocked}:{onLocked:()=>void}){
  const paymentOpening=useRef(false),formSubmitting=useRef(false),modalWasOpen=useRef(false),focusBeforeModal=useRef<HTMLElement|null>(null)
  useEffect(()=>{
   if(modal&&!modalWasOpen.current)focusBeforeModal.current=document.activeElement instanceof HTMLElement?document.activeElement:null
-  if(!modal&&modalWasOpen.current){const target=focusBeforeModal.current;requestAnimationFrame(()=>{if(target?.isConnected)target.focus()})}
+  if(!modal&&modalWasOpen.current){const target=focusBeforeModal.current;requestAnimationFrame(()=>{if(target?.isConnected&&!document.querySelector('.dialog'))target.focus()})}
   modalWasOpen.current=!!modal
   if(!modal)return
   const dialog=document.querySelector<HTMLElement>('.dialog')

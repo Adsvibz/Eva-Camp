@@ -122,6 +122,7 @@ async function booking(arrival,departure){
  assert.equal(await page.getByRole('dialog').count(),1)
  await page.locator('.dialog .form-actions .primary').focus();await page.keyboard.press('Tab');assert.equal(await page.evaluate(()=>document.activeElement?.getAttribute('aria-label')),'Close')
  await page.getByLabel('Amount (EGP)',{exact:true}).fill('٠٫٢٩');await page.getByLabel('Date',{exact:true}).fill(day);await page.getByLabel('Note (optional)',{exact:true}).fill('دفعة تجريبية')
+ await page.getByText('Selected date: 10/11/2026 (DD/MM/YYYY)',{exact:true}).waitFor()
  await preview(()=>page.locator('.payment-form').evaluate(form=>{form.requestSubmit();form.requestSubmit()}),'receipt-partial','0.29')
  await page.locator('.payment-history-row').filter({hasText:'دفعة تجريبية'}).waitFor()
  let payments=await page.evaluate(id=>window.eva.listPayments({bookingId:id,offset:0}),first.id);assert.equal(payments.rows.length,2);assert.equal(payments.rows[0].amountPiasters,29)
