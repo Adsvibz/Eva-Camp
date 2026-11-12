@@ -69,3 +69,9 @@ export type PaymentRow={id:number;receiptNo:string;date:string;method:'cash'|'ca
 export type PaymentHistoryPage={rows:PaymentRow[];hasMore:boolean}
 
 export type CompanionStay={bookingId:number;companionId:number;companionName:string;reference:string;primaryGuest:string;arrival:string;departure:string;status:string}
+
+export const companionHistoryCursorSchema=z.object({arrival:date,bookingId:z.number().int().positive().safe(),companionId:z.number().int().positive().safe()}).strict()
+export const companionHistoryPageSchema=z.object({identity:z.string().trim().min(1).max(100),cursor:companionHistoryCursorSchema.optional()}).strict()
+export type CompanionHistoryCursor=z.infer<typeof companionHistoryCursorSchema>
+export type CompanionHistoryInput=z.infer<typeof companionHistoryPageSchema>
+export type CompanionHistoryPage={rows:CompanionStay[];nextCursor:CompanionHistoryCursor|null}

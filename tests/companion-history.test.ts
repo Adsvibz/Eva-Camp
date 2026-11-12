@@ -41,4 +41,17 @@ describe('protected companion stay lookup',()=>{
   expect(db.prepare('SELECT count(*) AS n FROM additional_guests WHERE id_passport_lookup IS NOT NULL').get()).toEqual({n:0})
  })
 
+ it('paginates every matching stay without omissions or repeats, including equal dates and bookings',()=>{
+  for(let i=0;i<45;i++){const companions=[{fullName:`Companion ${i}`,idNumber:'REPEAT'},...(i===0?[{fullName:'Second on same booking',idNumber:'REPEAT',allowDuplicateIdentity:true}]:[])];const booking=repo.createBooking({...base(),fullName:`Guest ${i}`,companions});repo.changeStatus(booking.id,'cancelled')}
+  const all:number[]=[];let cursor:undefined|{arrival:string;bookingId:number;companionId:number}
+  for(let i=0;i<4;i++){const page=repo.findCompanionHistoryPage({identity:'repeat',cursor});all.push(...page.rows.map(x=>x.companionId));if(!page.nextCursor)break;cursor=page.nextCursor}
+  expect(all).toHaveLength(46);expect(new Set(all).size).toBe(46);expect(all).toEqual([...all].sort((a,b)=>b-a))
+ })
+ it('validates pagination cursors and provides a cursor only when another page exists',()=>{
+  repo.createBooking({...base(),companions:[{fullName:'One',idNumber:'ID-1'}]})
+  const page=repo.findCompanionHistoryPage({identity:'ID-1'});expect(page.rows).toHaveLength(1);expect(page.nextCursor).toBeNull()
+  expect(()=>repo.findCompanionHistoryPage({identity:'ID-1',cursor:{arrival:'2026-02-30',bookingId:1,companionId:1}})).toThrow()
+  expect(()=>repo.findCompanionHistoryPage({identity:'ID-1',cursor:{arrival:'2026-11-01',bookingId:0,companionId:1}})).toThrow()
+ })
+
 })

@@ -350,6 +350,18 @@ async function booking(arrival,departure){
  assert.deepEqual(physicalSafety,{rejected:true,status:'reserved',after:'checked-in'})
  await page.evaluate(async id=>{for(let i=0;i<55;i++)await window.eva.addExtra({bookingId:id,description:`Long-${i}`,quantity:1,unitPricePiasters:1})},first.id)
  await preview(()=>page.evaluate(id=>window.eva.previewInvoice(id),first.id),'invoice-many-items','Long-54',2)
+ // Companion search can retrieve older pages without duplicating stays.
+ await page.evaluate(async()=>{const unit=(await window.eva.listUnits()).find(u=>u.name==='A').id;for(let i=0;i<22;i++){const booking=await window.eva.createBooking({fullName:`Paging primary ${i}`,phone:'',unitId:unit,arrival:'2026-01-01',departure:'2026-01-02',adults:1,children:0,totalPiasters:0,source:'phone',companions:[{fullName:`Paging companion ${i}`,idNumber:'HISTORY-1'}]});await window.eva.changeStatus(booking.id,'cancelled')}})
+ await page.keyboard.press('Control+k')
+ await page.getByLabel('Companion ID / passport number',{exact:true}).fill('HISTORY-1')
+ await page.getByRole('button',{name:'Search companion stays',exact:true}).click()
+ await page.getByRole('button',{name:'Load older stays',exact:true}).waitFor()
+ assert.equal(await page.locator('.companion-search .search-results button').count(),20)
+ await page.getByRole('button',{name:'Load older stays',exact:true}).click()
+ await page.waitForFunction(()=>document.querySelectorAll('.companion-search .search-results button').length===22)
+ assert.equal(await page.getByRole('button',{name:'Load older stays',exact:true}).count(),0)
+ await page.locator('.companion-search .search-results button').last().click()
+ await page.getByRole('heading',{name:'Booking details',exact:true}).waitFor();await closeModal()
  await app.close();app=null
  // Exercise the packaged executable and bundled native module with a separate disposable profile.
  const executable=path.join(root,'dist','win-unpacked','Eva Camp.exe')

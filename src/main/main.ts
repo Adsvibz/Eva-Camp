@@ -1,3 +1,4 @@
+import {companionHistoryPageSchema} from '../shared/contracts'
 import {undoIdentityConfirmationSchema} from '../shared/contracts'
 import {unitAvailabilitySchema} from '../shared/contracts'
 import {saveDeclarationSchema,undoDeclarationSchema,archivePageSchema} from '../shared/declaration'
@@ -144,6 +145,7 @@ app.whenReady().then(()=>{
   handle('guests:find',(_event,query:unknown)=>repository.findGuests(searchSchema.parse(query)))
   handle('guests:find-identity',(_event,query:unknown)=>repository.findGuestsByIdentity(searchSchema.parse(query)))
   handle('companions:find-history',(_event,query:unknown)=>repository.findCompanionHistoryByIdentity(searchSchema.parse(query)))
+  handle('companions:find-history-page',(_event,input:unknown)=>repository.findCompanionHistoryPage(companionHistoryPageSchema.parse(input)))
   handle('guests:duplicates',(_event,phone:unknown)=>repository.duplicateGuests(searchSchema.parse(phone)))
   handle('guests:history',(_event,raw:unknown)=>repository.guestHistory(guestHistorySchema.parse(raw)))
   handle('bookings:search',(_event,query:unknown)=>repository.searchBookings(searchSchema.parse(query)))

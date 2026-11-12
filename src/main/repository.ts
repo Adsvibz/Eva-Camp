@@ -1,3 +1,4 @@
+import type {CompanionHistoryInput} from '../shared/contracts'
 import {IdentityLookup,normalizeIdentity} from './identity-lookup'
 import {unitAvailabilitySchema,type UnitAvailabilityInput,type UnitAvailability} from '../shared/contracts'
 import {paymentHistorySchema,type PaymentHistoryInput,type PaymentHistoryPage,type PaymentRow} from '../shared/contracts'
@@ -30,6 +31,7 @@ export class CampRepository {
  findGuests(query:string){return new GuestDirectory(this.db).find(query)}
  findGuestsByIdentity(query:string){return new IdentityLookup(this.db,this.encrypt,this.decrypt).find(query)}
  findCompanionHistoryByIdentity(query:string){return new IdentityLookup(this.db,this.encrypt,this.decrypt).findCompanionHistory(query)}
+ findCompanionHistoryPage(input:CompanionHistoryInput){return new IdentityLookup(this.db,this.encrypt,this.decrypt).findCompanionHistoryPage(input)}
  duplicateGuests(phone:string){return new GuestDirectory(this.db).matchPhone(phone)}
  guestHistory(input:GuestHistoryInput){return new GuestDirectory(this.db).history(input)}
  getPreferences():UiPreferences{
