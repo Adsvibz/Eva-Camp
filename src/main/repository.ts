@@ -1,3 +1,5 @@
+import {DeclarationStore} from './declarations'
+import type {SaveDeclarationInput,UndoDeclarationInput} from '../shared/declaration'
 import {discountSchema,type DiscountInput} from '../shared/contracts'
 import {dashboardSummary} from './dashboard'
 import {updateUnitSchema,type UpdateUnitInput} from '../shared/contracts'
@@ -15,6 +17,9 @@ function localDay():string{const d=new Date();return `${d.getFullYear()}-${Strin
 
 export class CampRepository {
  constructor(private db: Database.Database, private encrypt?: (value:string)=>Buffer, private decrypt?: (value:Buffer)=>string, private today:()=>string=localDay) { db.pragma('foreign_keys = ON') }
+ getDeclaration(id:number){return new DeclarationStore(this.db,this.today).get(id)}
+ saveDeclaration(input:SaveDeclarationInput){return new DeclarationStore(this.db,this.today).save(input)}
+ undoDeclaration(input:UndoDeclarationInput){return new DeclarationStore(this.db,this.today).undo(input)}
  dashboard(day:string){return dashboardSummary(this.db,day)}
  findGuests(query:string){return new GuestDirectory(this.db).find(query)}
  duplicateGuests(phone:string){return new GuestDirectory(this.db).matchPhone(phone)}
@@ -107,7 +112,7 @@ export class CampRepository {
   const unseal=(cipher:Buffer|null)=>{if(!cipher)return '';if(!this.decrypt)throw new Error('Identity decryption unavailable');return this.decrypt(cipher)}
   const others=this.db.prepare('SELECT full_name AS fullName,id_passport_ciphertext AS idCipher FROM additional_guests WHERE booking_id=? AND deleted_at IS NULL ORDER BY id').all(id) as {fullName:string;idCipher:Buffer|null}[]
   const {idCipher,...rest}=row
-  return {...rest,idNumber:unseal(idCipher),companions:others.map(g=>({fullName:g.fullName,idNumber:unseal(g.idCipher)}))}
+  return {...rest,declaration:this.getDeclaration(id),idNumber:unseal(idCipher),companions:others.map(g=>({fullName:g.fullName,idNumber:unseal(g.idCipher)}))}
  }
  getBooking(id:number):BookingDetail|null {
   const row=this.db.prepare(`SELECT b.id,b.guest_id AS guestId,b.unit_id AS unitId,b.booking_reference AS reference,g.full_name AS fullName,g.nationality,g.email,g.date_of_birth AS dateOfBirth,g.country,g.home_address AS address,g.notes,(g.id_passport_ciphertext IS NOT NULL) AS hasPrimaryId,COALESCE(g.mobile_whatsapp,'') AS phone,b.adults_count AS adults,b.children_count AS children,b.source,u.name AS unitName,b.arrival_date AS arrival,b.departure_date AS departure,b.status,v.total_piasters AS totalPiasters,v.discount_piasters AS discountPiasters,v.extras_piasters AS extrasPiasters,v.total_piasters-v.discount_piasters+v.extras_piasters AS totalDuePiasters,v.paid_piasters AS paidPiasters,v.balance_piasters AS balancePiasters FROM bookings b JOIN guests g ON g.id=b.guest_id JOIN units u ON u.id=b.unit_id JOIN booking_balances v ON v.booking_id=b.id WHERE b.id=? AND b.deleted_at IS NULL`).get(id) as Omit<BookingDetail,'companions'>|undefined

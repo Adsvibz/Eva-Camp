@@ -5,7 +5,7 @@ import {join} from 'node:path'
 import {CampRepository} from '../src/main/repository'
 describe('unit management',()=>{
  let db:Database.Database,repo:CampRepository,unit:number
- beforeEach(()=>{db=new Database(':memory:');for(const f of ['0001_initial.sql','0002_unit_segments.sql','0003_guest_lookup.sql'])db.exec(readFileSync(join(process.cwd(),'db/migrations',f),'utf8'));repo=new CampRepository(db,undefined,undefined,()=> '2026-11-11');unit=repo.createUnit({name:'A',type:'room',capacity:3,pricePiasters:10000})})
+ beforeEach(()=>{db=new Database(':memory:');for(const f of ['0001_initial.sql','0002_unit_segments.sql','0003_guest_lookup.sql','0004_declarations.sql'])db.exec(readFileSync(join(process.cwd(),'db/migrations',f),'utf8'));repo=new CampRepository(db,undefined,undefined,()=> '2026-11-11');unit=repo.createUnit({name:'A',type:'room',capacity:3,pricePiasters:10000})})
  afterEach(()=>db.close())
  const update=(overrides:Record<string,unknown>={})=>repo.updateUnit({id:unit,name:'A renamed',type:'chalet',capacity:3,pricePiasters:25000,housekeepingStatus:'cleaning',notes:'Needs cleaning',...overrides})
  const booking=(unitId=unit,adults=2)=>repo.createBooking({fullName:'Test',phone:'',unitId,arrival:'2026-11-12',departure:'2026-11-15',adults,children:0,totalPiasters:30000,source:'phone'}).id

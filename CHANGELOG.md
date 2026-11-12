@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add bilingual guest declarations, mouse/touch signature capture, guarded undo, registration printing, stale-signature invalidation and versioned backup-compatible migration.
+
 - Add fixed accommodation discounts with exact Arabic/English amount entry, transactional before/after audit, guarded undo, and credit-balance guidance.
 
 - Add unit editing and housekeeping status controls, capacity safeguards, and audit details.

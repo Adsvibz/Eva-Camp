@@ -8,9 +8,13 @@ function verify(db:Database.Database){
  if(db.pragma('integrity_check',{simple:true})!=='ok')throw new Error('Database integrity check failed')
  if((db.pragma('foreign_key_check') as unknown[]).length)throw new Error('Database foreign keys are invalid')
  const version=db.prepare('SELECT MAX(version) AS version FROM schema_migrations').get() as {version:number}
- if(![1,2,3].includes(version.version))throw new Error('Unsupported database version')
+ if(![1,2,3,4].includes(version.version))throw new Error('Unsupported database version')
 }
 function convertIdentities(db:Database.Database,convert:(value:Buffer)=>Buffer){
+ // Rewrapping unchanged identities must not invalidate the signed form. Preserve
+ // revision/current state only within this controlled, transactional conversion.
+ const version=(db.prepare('SELECT MAX(version) AS version FROM schema_migrations').get() as {version:number}).version
+ const declarations=version>=4?db.prepare('SELECT booking_id,is_current,revision FROM declarations').all() as {booking_id:number;is_current:number;revision:number}[]:[]
  for(const table of ['guests','additional_guests'] as const){
   const rows=db.prepare(`SELECT id,id_passport_ciphertext AS cipher FROM ${table} WHERE id_passport_ciphertext IS NOT NULL`).all() as {id:number;cipher:Buffer}[]
   const update=db.prepare(`UPDATE ${table} SET id_passport_ciphertext=?,id_passport_lookup=NULL WHERE id=?`)
@@ -19,6 +23,7 @@ function convertIdentities(db:Database.Database,convert:(value:Buffer)=>Buffer){
  const changes=db.prepare("SELECT id,detail_json AS detail FROM audit_log WHERE action='identity-change'").all() as {id:number;detail:string}[]
  const update=db.prepare('UPDATE audit_log SET detail_json=? WHERE id=?')
  for(const change of changes){const value=JSON.parse(change.detail) as {before:string|null;after:string|null};for(const field of ['before','after'] as const)if(value[field])value[field]=convert(Buffer.from(value[field]!,'base64')).toString('base64');update.run(JSON.stringify(value),change.id)}
+ if(version>=4){const restore=db.prepare('UPDATE declarations SET is_current=?,revision=? WHERE booking_id=?');for(const row of declarations)restore.run(row.is_current,row.revision,row.booking_id)}
 }
 /** The only plaintext copy is held in memory; the resulting archive is encrypted and authenticated. */
 export function createPortableArchive(live:Database.Database,password:string,decrypt:(value:Buffer)=>string):Buffer {

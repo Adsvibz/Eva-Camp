@@ -7,7 +7,7 @@ import {CampRepository} from '../src/main/repository'
 describe('front desk overview',()=>{
  let db:Database.Database,repo:CampRepository
  const day='2026-11-11'
- beforeEach(()=>{db=new Database(':memory:');for(const file of ['0001_initial.sql','0002_unit_segments.sql','0003_guest_lookup.sql'])db.exec(readFileSync(join(process.cwd(),'db/migrations',file),'utf8'));repo=new CampRepository(db)})
+ beforeEach(()=>{db=new Database(':memory:');for(const file of ['0001_initial.sql','0002_unit_segments.sql','0003_guest_lookup.sql','0004_declarations.sql'])db.exec(readFileSync(join(process.cwd(),'db/migrations',file),'utf8'));repo=new CampRepository(db)})
  afterEach(()=>db.close())
  const unit=(name:string)=>repo.createUnit({name,type:'room',capacity:4,pricePiasters:0})
  const booking=(id:number,arrival:string,departure:string,name:string,totalPiasters=10000)=>repo.createBooking({fullName:name,phone:'',unitId:id,arrival,departure,adults:1,children:0,totalPiasters,source:'phone'})

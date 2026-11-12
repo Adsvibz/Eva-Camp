@@ -51,3 +51,13 @@ html[data-theme='dark'] button:focus-visible,html[data-theme='dark'] input:focus
 
 .discount-editor .fields{grid-template-columns:minmax(0,340px)}
 html[data-theme="dark"] .discount-editor{border-color:#3b443c}
+
+.declaration-editor blockquote{margin:14px 0;padding:12px 14px;background:#f4f4f2;border-inline-start:2px solid #949a94;font-size:13px}
+.signature-pad,.signature-preview{display:block;width:100%;aspect-ratio:10/3;background:#fff;border:1px solid #dfe3de;border-radius:8px;color:#171b19}
+.signature-pad{touch-action:none;user-select:none;cursor:crosshair}
+.signature-preview{max-width:400px;margin-block:14px}
+.signature-actions{display:flex;gap:12px;flex-wrap:wrap;margin-block:8px}
+.declaration-confirm{display:flex;align-items:flex-start;gap:10px;font-size:13px;margin-top:18px}
+.declaration-confirm input{width:18px;height:18px;flex:none;margin-top:2px}
+.declaration-summary{display:flex;gap:12px 24px;flex-wrap:wrap;font-size:13px;margin-bottom:14px}
+html[data-theme="dark"] .declaration-editor blockquote{background:#303830;border-color:#859185}

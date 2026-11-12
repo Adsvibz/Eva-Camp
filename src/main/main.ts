@@ -1,3 +1,4 @@
+import {saveDeclarationSchema,undoDeclarationSchema} from '../shared/declaration'
 import { app, BrowserWindow, ipcMain, dialog, safeStorage, Menu, protocol } from 'electron'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
@@ -33,7 +34,8 @@ app.whenReady().then(()=>{
   let version=(db.prepare('SELECT MAX(version) AS version FROM schema_migrations').get() as {version:number}).version
   if(version===1){db.exec(readFileSync(join(app.getAppPath(),'db/migrations/0002_unit_segments.sql'),'utf8'));version=2}
   if(version===2){db.exec(readFileSync(join(app.getAppPath(),'db/migrations/0003_guest_lookup.sql'),'utf8'));version=3}
-  if(version!==3) throw new Error(`Unsupported database schema: ${version}`)
+  if(version===3){db.exec(readFileSync(join(app.getAppPath(),'db/migrations/0004_declarations.sql'),'utf8'));version=4}
+  if(version!==4) throw new Error(`Unsupported database schema: ${version}`)
   let restoring=false
   let backupPending:Promise<unknown>=Promise.resolve()
   const backup=()=>{backupPending=track(backupPending.then(()=>createVerifiedBackup(db,join(dataDir,'backups'))).catch(error=>dialog.showErrorBox('Backup failed / تعذر النسخ الاحتياطي',String(error))));return backupPending}
@@ -119,6 +121,9 @@ app.whenReady().then(()=>{
   handle('identity:replace',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');return repository.replaceIdentity(replaceIdentitySchema.parse(raw))})
   handle('identity:undo',(_event,id:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');repository.undoIdentity(statusSchema.shape.bookingId.parse(id))})
   handle('bookings:discount',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');repository.setDiscount(discountSchema.parse(raw))})
+  handle('declaration:get',(_event,id:unknown)=>repository.getDeclaration(statusSchema.shape.bookingId.parse(id)))
+  handle('declaration:save',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');return repository.saveDeclaration(saveDeclarationSchema.parse(raw))})
+  handle('declaration:undo',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');repository.undoDeclaration(undoDeclarationSchema.parse(raw))})
   handle('extras:list',(_event,id:unknown)=>repository.listExtras(statusSchema.shape.bookingId.parse(id)))
   handle('extras:add',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');return repository.addExtra(addExtraSchema.parse(raw))})
   handle('extras:remove',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');repository.removeExtra(extraRefSchema.parse(raw))})

@@ -7,7 +7,7 @@ import {CampRepository} from '../src/main/repository'
 describe('physical occupancy safety',()=>{
  let db:Database.Database,repo:CampRepository,a:number,b:number
  const day='2026-11-11'
- beforeEach(()=>{db=new Database(':memory:');for(const f of ['0001_initial.sql','0002_unit_segments.sql','0003_guest_lookup.sql'])db.exec(readFileSync(join(process.cwd(),'db/migrations',f),'utf8'));repo=new CampRepository(db,undefined,undefined,()=>day);a=repo.createUnit({name:'A',type:'room',capacity:2,pricePiasters:0});b=repo.createUnit({name:'B',type:'room',capacity:2,pricePiasters:0})})
+ beforeEach(()=>{db=new Database(':memory:');for(const f of ['0001_initial.sql','0002_unit_segments.sql','0003_guest_lookup.sql','0004_declarations.sql'])db.exec(readFileSync(join(process.cwd(),'db/migrations',f),'utf8'));repo=new CampRepository(db,undefined,undefined,()=>day);a=repo.createUnit({name:'A',type:'room',capacity:2,pricePiasters:0});b=repo.createUnit({name:'B',type:'room',capacity:2,pricePiasters:0})})
  afterEach(()=>db.close())
  const booking=(unitId:number,arrival:string,departure:string)=>repo.createBooking({fullName:'Test guest',phone:'',unitId,arrival,departure,adults:1,children:0,totalPiasters:0,source:'phone'}).id
  it('does not check in the next guest while the previous guest is overdue',()=>{

@@ -40,3 +40,15 @@ it('restores a schema-two snapshot then upgrades phone lookup and linked stay hi
   }
  }finally{db.close();rmSync(dir,{recursive:true,force:true})}
 })
+
+it('upgrades existing bookings and keeps legacy declaration paths untrusted',()=>{
+ const db=new Database(':memory:')
+ try{
+  for(const file of ['0001_initial.sql','0002_unit_segments.sql','0003_guest_lookup.sql'])db.exec(sql(file))
+  db.exec("INSERT INTO guests(full_name) VALUES ('Legacy');INSERT INTO units(name,type,capacity) VALUES ('A','room',2);INSERT INTO bookings(booking_reference,guest_id,unit_id,arrival_date,departure_date,adults_count,total_piasters,status,source) VALUES ('OLD',1,1,'2026-11-01','2026-11-03',1,10000,'reserved','phone');INSERT INTO declarations(booking_id,confirmation_text,signature_path,received_by,signed_date) VALUES (1,'Old confirmation','C:/signature.png','Staff','2026-11-01')")
+  db.exec(sql('0004_declarations.sql'))
+  expect(db.prepare('SELECT MAX(version) AS v FROM schema_migrations').get()).toEqual({v:4})
+  expect(new CampRepository(db).getDeclaration(1)).toMatchObject({isCurrent:false,signature:null,hasPrevious:true,receivedBy:'Staff'})
+  expect(new CampRepository(db).registrationData(1).fullName).toBe('Legacy')
+ }finally{db.close()}
+})

@@ -46,3 +46,10 @@ The attached image is a reference for header, wordmark, bilingual labels, sectio
 ## Schema 3: shared guest profiles and phone lookup
 
 Bookings can explicitly reuse an existing `guest_id`. Submitted guest field values are ignored during reuse so choosing a returning guest cannot silently change its profile or encrypted identity. New profiles with an exact normalized phone match require explicit shared-phone acknowledgement; this is audited without the phone value. Name suggestions are prefix searches, with a 20-result limit. Guest history uses the guest/date index with 50-row pages. The schema upgrade backfills Western, Arabic and Persian digits and canonicalizes Egyptian mobile prefixes, preserving the original display number. Phone and name indexes contain personal information and remain unencrypted, as do the existing name and phone fields. Exact encrypted-ID lookup remains unimplemented. Profile edits are shared across bookings; historical profile snapshots are not implemented.
+
+
+## Schema 4: declarations and signature validity
+
+Every booking has a declaration row. Signatures are bounded vectors, stored with the confirmation, staff and date in SQLite; no external signature files are required. The application saves the declaration and its undo history transactionally. Database triggers increment a revision and invalidate the declaration when data shown on the registration form changes. Printing includes ink only while the declaration remains current. A stale revision cannot be saved or undone against a later edit. The signed form is not an immutable historical snapshot and the captured ink is not a certified digital signature.
+
+A version-3 migration creates missing declaration rows and treats legacy declarations as unverified, without reading legacy paths. Backup verification accepts version 4. Portable export and import preserve validity and revision only during the transactional conversion of unchanged identity ciphertext. The database and declaration history are not fully encrypted; a PIN is an application lock. Physical cross-computer recovery and printer acceptance remain outstanding.
