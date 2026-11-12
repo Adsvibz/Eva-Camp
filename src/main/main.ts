@@ -141,6 +141,7 @@ app.whenReady().then(()=>{
   handle('preferences:get',()=>repository.getPreferences())
   handle('preferences:save',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');repository.savePreferences(uiPreferencesSchema.parse(raw))})
   handle('guests:find',(_event,query:unknown)=>repository.findGuests(searchSchema.parse(query)))
+  handle('guests:find-identity',(_event,query:unknown)=>repository.findGuestsByIdentity(searchSchema.parse(query)))
   handle('guests:duplicates',(_event,phone:unknown)=>repository.duplicateGuests(searchSchema.parse(phone)))
   handle('guests:history',(_event,raw:unknown)=>repository.guestHistory(guestHistorySchema.parse(raw)))
   handle('bookings:search',(_event,query:unknown)=>repository.searchBookings(searchSchema.parse(query)))

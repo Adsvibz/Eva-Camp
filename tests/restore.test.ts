@@ -38,3 +38,7 @@ it('rejects a backup with broken foreign keys without leaving a staged file',asy
  const dir=mkdtempSync(join(tmpdir(),'eva-restore-fk-'));const source=join(dir,'backup.sqlite'),pending=join(dir,'pending.sqlite')
  try{const db=new Database(source);db.exec(schema);db.pragma('foreign_keys = OFF');db.prepare('INSERT INTO additional_guests(booking_id,full_name) VALUES (?,?)').run(999,'Orphan');db.close();await expect(stageRestore(source,pending,()=>true)).rejects.toThrow('foreign keys');expect(existsSync(pending)).toBe(false)}finally{rmSync(dir,{recursive:true,force:true})}
 })
+it('rejects a backup whose protected identity lookup key cannot be opened',async()=>{
+ const dir=mkdtempSync(join(tmpdir(),'eva-index-restore-'));const source=join(dir,'backup.sqlite'),pending=join(dir,'pending.sqlite')
+ try{const db=new Database(source);db.exec(schema);db.prepare('INSERT INTO settings(key,value_json) VALUES (?,?)').run('security:identity-lookup-key-v1',JSON.stringify(Buffer.from('protected-key').toString('base64')));db.close();await expect(stageRestore(source,pending,()=>false)).rejects.toThrow('encrypted identities');expect(existsSync(pending)).toBe(false)}finally{rmSync(dir,{recursive:true,force:true})}
+})

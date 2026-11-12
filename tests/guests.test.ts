@@ -69,4 +69,28 @@ describe('returning guests',()=>{
   expect(audit).toHaveLength(1);expect(JSON.stringify(audit)).not.toContain('01220755755');expect(JSON.stringify(audit)).not.toContain('SECRET-ID')
  })
 
+ it('matches exact protected identity values and keeps the lookup current after edits and undo',()=>{
+  const booking=repo.createBooking(input());const guestId=(db.prepare('SELECT id FROM guests').get() as {id:number}).id
+  expect(repo.findGuestsByIdentity(' secret-id ')).toMatchObject([{id:guestId}])
+  const stored=db.prepare('SELECT id_passport_lookup AS lookup FROM guests').get() as {lookup:string}
+  expect(stored.lookup).not.toContain('SECRET-ID');expect(stored.lookup).toMatch(/^[a-f0-9]{64}$/)
+  expect(repo.findGuestsByIdentity('SECRET')).toEqual([])
+  const change=repo.replaceIdentity({bookingId:booking.id,kind:'primary',idNumber:'NEW-ID'})
+  expect(repo.findGuestsByIdentity('SECRET-ID')).toEqual([]);expect(repo.findGuestsByIdentity('new-id')).toHaveLength(1)
+  repo.undoIdentity(change);expect(repo.findGuestsByIdentity('SECRET-ID')).toHaveLength(1);expect(repo.findGuestsByIdentity('NEW-ID')).toEqual([])
+  db.prepare('UPDATE guests SET deleted_at=CURRENT_TIMESTAMP WHERE id=?').run(guestId);expect(repo.findGuestsByIdentity('SECRET-ID')).toEqual([])
+ })
+ it('updates the protected lookup for guests created after it is initialized',()=>{
+  expect(repo.findGuestsByIdentity('FIRST')).toEqual([]);repo.createBooking({...input(),idNumber:'FIRST'})
+  expect(repo.findGuestsByIdentity('first')).toHaveLength(1)
+ })
+
+ it('does not leave a partial index or key when an existing identity cannot be decrypted',()=>{
+  repo.createBooking(input());db.prepare('INSERT INTO guests(full_name,id_passport_ciphertext) VALUES (?,?)').run('Broken',Buffer.from('bad'))
+  const failing=new CampRepository(db,v=>Buffer.from('cipher:'+v),v=>{if(v.toString()==='bad')throw new Error('bad ciphertext');return v.toString().replace(/^cipher:/,'')})
+  expect(()=>failing.findGuestsByIdentity('anything')).toThrow('bad ciphertext')
+  expect(db.prepare("SELECT key FROM settings WHERE key='security:identity-lookup-key-v1'").get()).toBeUndefined()
+  expect(db.prepare('SELECT COUNT(*) AS n FROM guests WHERE id_passport_lookup IS NOT NULL').get()).toEqual({n:0})
+ })
+
 })

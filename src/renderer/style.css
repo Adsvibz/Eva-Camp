@@ -72,3 +72,5 @@ html[data-theme="dark"] .declaration-editor blockquote{background:#303830;border
 .payment-over{font-size:11px;line-height:1.5;font-weight:500;color:#675f4c}html[data-theme='dark'] .payment-over{color:#dfd2ae}
 .availability-message{grid-column:1/-1;display:grid;gap:5px;padding:12px 14px;border:1px solid #dfe3de;border-radius:9px;background:#f7f8f6;color:#404a42;font-size:12px;line-height:1.5}.availability-message small{color:#6c756d;font-size:11px}.availability-message .text-button{justify-self:start;padding:0;text-decoration:underline}html[data-theme='dark'] .availability-message{background:#202722;border-color:#4a554b;color:#e0e7e1}html[data-theme='dark'] .availability-message small{color:#b8c2b9}
 .booking-date-confirmation{font-size:11px;font-weight:400;line-height:1.45;color:#687369}.booking-date-confirmation b{font-weight:600}.booking-form .form-actions{flex-wrap:wrap}html[data-theme='dark'] .booking-date-confirmation{color:#b8c2b9}
+
+.identity-lookup{margin-top:16px;padding-top:16px;border-top:1px solid #dfe3de}.identity-lookup .search-results{margin-top:10px}html[data-theme='dark'] .identity-lookup{border-color:#465047}

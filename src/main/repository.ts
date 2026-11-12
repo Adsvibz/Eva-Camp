@@ -1,3 +1,4 @@
+import {IdentityLookup} from './identity-lookup'
 import {unitAvailabilitySchema,type UnitAvailabilityInput,type UnitAvailability} from '../shared/contracts'
 import {paymentHistorySchema,type PaymentHistoryInput,type PaymentHistoryPage,type PaymentRow} from '../shared/contracts'
 import {DeclarationArchives,type ArchiveFactory} from './declaration-archives'
@@ -27,6 +28,7 @@ export class CampRepository {
  undoDeclaration(input:UndoDeclarationInput){return new DeclarationStore(this.db,this.today).undo(input)}
  dashboard(day:string){return dashboardSummary(this.db,day)}
  findGuests(query:string){return new GuestDirectory(this.db).find(query)}
+ findGuestsByIdentity(query:string){return new IdentityLookup(this.db,this.encrypt,this.decrypt).find(query)}
  duplicateGuests(phone:string){return new GuestDirectory(this.db).matchPhone(phone)}
  guestHistory(input:GuestHistoryInput){return new GuestDirectory(this.db).history(input)}
  getPreferences():UiPreferences{
@@ -105,6 +107,7 @@ export class CampRepository {
    const shared=this.duplicateGuests(d.phone).length>0
    if(shared&&!d.allowSharedPhone)throw new Error('DUPLICATE_GUEST')
    guestId=Number(this.db.prepare('INSERT INTO guests(full_name,mobile_whatsapp,normalized_phone,nationality,email,date_of_birth,country,home_address,notes,id_passport_ciphertext) VALUES (?,?,?,?,?,?,?,?,?,?)').run(d.fullName,d.phone,normalizePhone(d.phone),d.nationality||null,d.email||null,d.dateOfBirth||null,d.country||null,d.address||null,d.notes||null,protect(d.idNumber)).lastInsertRowid)
+   if(d.idNumber)this.db.prepare('UPDATE guests SET id_passport_lookup=? WHERE id=?').run(new IdentityLookup(this.db,this.encrypt,this.decrypt).forWrite(d.idNumber),guestId)
    this.audit(shared?'create-shared-phone':'create','guest',guestId)
   }
   const year=Number(d.arrival.slice(0,4)); const reference=`EVA-${year}-${String(this.sequence('booking',year)).padStart(4,'0')}`
@@ -213,7 +216,7 @@ export class CampRepository {
    const b=this.activeBooking(d.bookingId);const record=d.kind==='primary'?this.db.prepare('SELECT id_passport_ciphertext AS cipher FROM guests WHERE id=?').get(b.guestId):this.db.prepare('SELECT id_passport_ciphertext AS cipher FROM additional_guests WHERE id=? AND booking_id=? AND deleted_at IS NULL').get(d.companionId,d.bookingId)
    if(!record)throw new Error('Identity unavailable');const before=(record as {cipher:Buffer|null}).cipher;let after:Buffer|null=null
    if(d.idNumber){if(!this.encrypt)throw new Error('Identity encryption unavailable');after=this.encrypt(d.idNumber)}
-   if(d.kind==='primary')this.db.prepare('UPDATE guests SET id_passport_ciphertext=?,id_passport_lookup=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(after,b.guestId)
+   if(d.kind==='primary')this.db.prepare('UPDATE guests SET id_passport_ciphertext=?,id_passport_lookup=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(after,new IdentityLookup(this.db,this.encrypt,this.decrypt).forWrite(d.idNumber),b.guestId)
    else this.db.prepare('UPDATE additional_guests SET id_passport_ciphertext=?,id_passport_lookup=NULL WHERE id=? AND booking_id=?').run(after,d.companionId,d.bookingId)
    const detail={bookingId:d.bookingId,kind:d.kind,entityId:d.kind==='primary'?b.guestId:d.companionId,before:before?.toString('base64')??null,after:after?.toString('base64')??null}
    return Number(this.db.prepare('INSERT INTO audit_log(actor,action,entity_type,entity_id,detail_json) VALUES (?,?,?,?,?)').run('operator','identity-change',d.kind,String(detail.entityId),JSON.stringify(detail)).lastInsertRowid)
@@ -230,7 +233,7 @@ export class CampRepository {
    if(!current||((current as {cipher:Buffer|null}).cipher?.toString('base64')??null)!==d.after)throw new Error('Identity has since changed')
    const value=d.before?Buffer.from(d.before,'base64'):null
    if(value){if(!this.decrypt)throw new Error('Identity decryption unavailable');this.decrypt(value)}
-   if(d.kind==='primary')this.db.prepare('UPDATE guests SET id_passport_ciphertext=?,id_passport_lookup=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(value,d.entityId)
+   if(d.kind==='primary')this.db.prepare('UPDATE guests SET id_passport_ciphertext=?,id_passport_lookup=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(value,new IdentityLookup(this.db,this.encrypt,this.decrypt).forWrite(value?this.decrypt!(value):''),d.entityId)
    else this.db.prepare('UPDATE additional_guests SET id_passport_ciphertext=?,id_passport_lookup=NULL WHERE id=? AND booking_id=?').run(value,d.entityId,d.bookingId)
    this.audit('identity-undo','identity-change',auditId)
   })()

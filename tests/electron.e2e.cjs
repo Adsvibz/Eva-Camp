@@ -97,6 +97,12 @@ async function booking(arrival,departure){
  const first=await page.evaluate(id=>window.eva.getBooking(id),rows[0].id)
  // An overlapping unit is explained and cannot be saved; another suitable unit remains selectable.
  await page.getByRole('button',{name:'New booking',exact:true}).click()
+ await page.getByLabel('Find by ID / passport',{exact:true}).fill('e2e-primary')
+ await page.getByRole('button',{name:'Search ID',exact:true}).click()
+ await page.getByRole('button',{name:/Use this guest/}).click()
+ assert.equal(await page.locator('input[name="name"]').inputValue(),name)
+ assert.equal((await page.evaluate(()=>window.eva.findGuestsByIdentity('E2E-PRIMARY'))).length,1)
+ await page.getByRole('button',{name:'Enter a new guest',exact:true}).click()
  await page.locator('select[name="unit"]').selectOption({label:'A'})
  await fill('arrival','2026-11-11');await fill('departure','2026-11-10')
  await page.getByText('Departure must be after arrival.').waitFor()
