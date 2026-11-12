@@ -15,3 +15,7 @@ export type DeclarationRecord={revision:number;isCurrent:boolean;confirmationTex
 
 // Paths contain only bounded numeric coordinates; never accept user-supplied SVG markup.
 export function signaturePaths(signature:Signature):string[]{return signature.map(stroke=>stroke.map((p,i)=>`${i?'L':'M'}${(p[0]*600).toFixed(2)},${(p[1]*180).toFixed(2)}`).join(' '))}
+
+export type DeclarationArchive={id:number;createdAt:string;signedDate:string;receivedBy:string;hasSignature:boolean;undone:boolean}
+export type DeclarationArchivePage={rows:DeclarationArchive[];hasMore:boolean}
+export const archivePageSchema=z.object({bookingId:z.number().int().positive().safe(),offset:z.number().int().min(0).max(1000000)}).strict()

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Archive each new guest declaration as a protected frozen registration form with shared bundled fonts, undo labels, paginated preview and backup/restore checks.
+
 - Add bilingual guest declarations, mouse/touch signature capture, guarded undo, registration printing, stale-signature invalidation and versioned backup-compatible migration.
 
 - Add fixed accommodation discounts with exact Arabic/English amount entry, transactional before/after audit, guarded undo, and credit-balance guidance.

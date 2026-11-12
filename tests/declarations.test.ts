@@ -5,6 +5,7 @@ import {join} from 'node:path'
 import {tmpdir} from 'node:os'
 import {CampRepository} from '../src/main/repository'
 import {registrationHtml} from '../src/main/print'
+const testFonts={serif:'YWJj',serifBold:'ZGVm',arabic:'Z2hp',arabicBold:'amts'}
 import {createVerifiedBackup} from '../src/main/backup'
 import {stageRestore} from '../src/main/restore'
 import {createPortableArchive,stagePortableRestore} from '../src/main/portable'
@@ -13,8 +14,8 @@ describe('guest declaration',()=>{
  let db:Database.Database,repo:CampRepository,id:number,unitId:number
  beforeEach(()=>{
   db=new Database(':memory:')
-  for(const file of ['0001_initial.sql','0002_unit_segments.sql','0003_guest_lookup.sql','0004_declarations.sql'])db.exec(readFileSync(join(process.cwd(),'db/migrations',file),'utf8'))
-  repo=new CampRepository(db,s=>Buffer.from('old:'+s),b=>b.toString().slice(4),()=>'2026-11-12')
+  for(const file of ['0001_initial.sql','0002_unit_segments.sql','0003_guest_lookup.sql','0004_declarations.sql','0005_declaration_archives.sql'])db.exec(readFileSync(join(process.cwd(),'db/migrations',file),'utf8'))
+  repo=new CampRepository(db,s=>Buffer.from('old:'+s),b=>b.toString().slice(4),()=>'2026-11-12',data=>({html:registrationHtml(data,testFonts),fonts:testFonts}))
   unitId=repo.createUnit({name:'A',type:'room',capacity:3,pricePiasters:0})
   id=repo.createBooking({fullName:'Guest',phone:'',idNumber:'PRIVATE-ID',unitId,arrival:'2026-11-10',departure:'2026-11-14',adults:1,children:0,totalPiasters:100000,source:'phone'}).id
  })

@@ -7,7 +7,7 @@ import {CampRepository} from '../src/main/repository'
 describe('returning guests',()=>{
  let db:Database.Database,repo:CampRepository,unitId:number
  const input=()=>({fullName:'مريم أحمد',phone:'01220755755',unitId,arrival:'2026-11-01',departure:'2026-11-02',adults:1,children:0,totalPiasters:10000,source:'phone' as const,nationality:'Egyptian',email:'guest@example.com',idNumber:'SECRET-ID'})
- beforeEach(()=>{db=new Database(':memory:');for(const f of ['0001_initial.sql','0002_unit_segments.sql','0003_guest_lookup.sql','0004_declarations.sql']){const p=join(process.cwd(),'db/migrations',f);db.exec(readFileSync(p,'utf8'))}repo=new CampRepository(db,v=>Buffer.from('encrypted:'+v),v=>v.toString().replace('encrypted:',''));unitId=repo.createUnit({name:'A',type:'room',capacity:3,pricePiasters:10000})})
+ beforeEach(()=>{db=new Database(':memory:');for(const f of ['0001_initial.sql','0002_unit_segments.sql','0003_guest_lookup.sql','0004_declarations.sql','0005_declaration_archives.sql']){const p=join(process.cwd(),'db/migrations',f);db.exec(readFileSync(p,'utf8'))}repo=new CampRepository(db,v=>Buffer.from('encrypted:'+v),v=>v.toString().replace('encrypted:',''));unitId=repo.createUnit({name:'A',type:'room',capacity:3,pricePiasters:10000})})
  afterEach(()=>db.close())
  it('requires an explicit choice before creating another profile with the same normalized phone',()=>{
   repo.createBooking(input())

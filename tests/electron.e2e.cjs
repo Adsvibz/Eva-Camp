@@ -24,7 +24,7 @@ async function preview(action,filename,text,minimumPages=1){
  await window.evaluate(()=>document.fonts.ready)
  if(filename.startsWith('invoice')){const widths=await window.evaluate(()=>({page:document.documentElement.scrollWidth,viewport:document.documentElement.clientWidth}));assert.ok(widths.page<=widths.viewport,`Invoice preview overflows horizontally: ${JSON.stringify(widths)}`)}
  assert.ok((await window.locator('body').innerText()).includes(text))
- if(filename==='registration-signed')assert.equal(await window.locator('svg.guest-signature').count(),1)
+ if(filename==='registration-signed'||filename==='registration-archived')assert.equal(await window.locator('svg.guest-signature').count(),1)
  if(filename==='registration-stale'||filename==='registration-blank')assert.equal(await window.locator('svg.guest-signature').count(),0)
  const url=window.url()
  const encoded=await app.evaluate(async({BrowserWindow},url)=>{
@@ -165,6 +165,11 @@ async function booking(arrival,departure){
  await page.getByText('Registration details changed. Review them with the guest and record a new declaration. The previous signature will not be printed.',{exact:true}).waitFor()
  assert.equal((await page.evaluate(id=>window.eva.getDeclaration(id),first.id)).isCurrent,false)
  await preview(()=>page.getByRole('button',{name:'Registration form',exact:true}).click(),'registration-stale','1199.00')
+ const archived=page.locator('.archive-row').last().getByRole('button',{name:'Open archived form',exact:true})
+ await preview(()=>archived.click(),'registration-archived','1200.00')
+ const archiveHistory=await page.evaluate(id=>window.eva.listDeclarationArchives({bookingId:id,offset:0}),first.id)
+ assert.equal(archiveHistory.rows.length,2);assert.equal(archiveHistory.rows[0].undone,true);assert.equal(archiveHistory.rows[1].hasSignature,true)
+
  await page.getByRole('button',{name:'Undo discount change',exact:true}).click()
  await page.getByRole('status').filter({hasText:'Discount change undone.'}).waitFor()
  assert.equal((await page.evaluate(id=>window.eva.getDeclaration(id),first.id)).signature,null)

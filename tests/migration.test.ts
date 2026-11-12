@@ -52,3 +52,17 @@ it('upgrades existing bookings and keeps legacy declaration paths untrusted',()=
   expect(new CampRepository(db).registrationData(1).fullName).toBe('Legacy')
  }finally{db.close()}
 })
+
+
+it('upgrades existing declarations without inventing archives',()=>{
+ const db=new Database(':memory:')
+ try{
+  for(const file of ['0001_initial.sql','0002_unit_segments.sql','0003_guest_lookup.sql','0004_declarations.sql'])db.exec(sql(file))
+  const repo=new CampRepository(db);const unitId=repo.createUnit({name:'A',type:'room',capacity:2,pricePiasters:0});const id=repo.createBooking({fullName:'Legacy',phone:'',unitId,arrival:'2026-11-10',departure:'2026-11-11',adults:1,children:0,totalPiasters:0,source:'phone'}).id
+  db.prepare("UPDATE declarations SET confirmation_text='Legacy',received_by='Staff',signed_date='2026-11-10',is_current=1 WHERE booking_id=?").run(id)
+  db.exec(sql('0005_declaration_archives.sql'))
+  expect(db.prepare('SELECT MAX(version) AS v FROM schema_migrations').get()).toEqual({v:5})
+  expect(repo.getDeclaration(id)).toMatchObject({isCurrent:true,receivedBy:'Staff'})
+  expect(repo.listDeclarationArchives(id,0)).toEqual({rows:[],hasMore:false})
+ }finally{db.close()}
+})

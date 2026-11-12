@@ -1,3 +1,4 @@
+import {assertArchiveIntegrity} from './archive-integrity'
 import Database from 'better-sqlite3'
 import { existsSync, renameSync, rmSync, statSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
@@ -6,10 +7,13 @@ function validate(db:Database.Database,canDecrypt:(value:Buffer)=>boolean) {
  if(db.pragma('integrity_check',{simple:true})!=='ok')throw new Error('Backup integrity check failed')
  if((db.pragma('foreign_key_check') as unknown[]).length)throw new Error('Backup foreign keys are invalid')
  const version=db.prepare('SELECT MAX(version) AS version FROM schema_migrations').get() as {version:number}
- if(![1,2,3,4].includes(version.version))throw new Error('Unsupported backup version')
+ if(![1,2,3,4,5].includes(version.version))throw new Error('Unsupported backup version')
  const fields=db.prepare(`SELECT id_passport_ciphertext AS value FROM guests WHERE id_passport_ciphertext IS NOT NULL UNION ALL SELECT id_passport_ciphertext AS value FROM additional_guests WHERE id_passport_ciphertext IS NOT NULL`).iterate() as Iterable<{value:Buffer}>
  const verify=(value:Buffer)=>{let ok=false;try{ok=canDecrypt(value)}catch{ok=false}if(!ok)throw new Error('Backup contains encrypted identities that cannot be decrypted on this computer')}
  for(const row of fields)verify(row.value)
+ assertArchiveIntegrity(db,version.version)
+ if(version.version>=5){const archives=db.prepare('SELECT document_ciphertext AS value FROM declaration_archives').iterate() as Iterable<{value:Buffer}>;for(const row of archives)verify(row.value)}
+
  const history=db.prepare("SELECT detail_json AS detail FROM audit_log WHERE action='identity-change'").iterate() as Iterable<{detail:string}>
  for(const row of history){const details=JSON.parse(row.detail) as {before:string|null;after:string|null};for(const value of [details.before,details.after])if(value)verify(Buffer.from(value,'base64'))}
 

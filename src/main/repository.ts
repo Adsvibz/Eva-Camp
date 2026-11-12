@@ -1,3 +1,4 @@
+import {DeclarationArchives,type ArchiveFactory} from './declaration-archives'
 import {DeclarationStore} from './declarations'
 import type {SaveDeclarationInput,UndoDeclarationInput} from '../shared/declaration'
 import {discountSchema,type DiscountInput} from '../shared/contracts'
@@ -16,9 +17,11 @@ import { unitSchema,bookingSchema,paymentSchema,statusSchema,date,calendarRangeS
 function localDay():string{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
 
 export class CampRepository {
- constructor(private db: Database.Database, private encrypt?: (value:string)=>Buffer, private decrypt?: (value:Buffer)=>string, private today:()=>string=localDay) { db.pragma('foreign_keys = ON') }
+ constructor(private db: Database.Database, private encrypt?: (value:string)=>Buffer, private decrypt?: (value:Buffer)=>string, private today:()=>string=localDay, private archiveFactory?:ArchiveFactory) { db.pragma('foreign_keys = ON') }
  getDeclaration(id:number){return new DeclarationStore(this.db,this.today).get(id)}
- saveDeclaration(input:SaveDeclarationInput){return new DeclarationStore(this.db,this.today).save(input)}
+ saveDeclaration(input:SaveDeclarationInput){return this.db.transaction(()=>{const changeId=new DeclarationStore(this.db,this.today).save(input);new DeclarationArchives(this.db,this.encrypt,this.decrypt).capture(input.bookingId,changeId,this.registrationData(input.bookingId),this.archiveFactory);return changeId})()}
+ listDeclarationArchives(bookingId:number,offset:number){return new DeclarationArchives(this.db,this.encrypt,this.decrypt).list(bookingId,offset)}
+ declarationArchiveHtml(id:number){return new DeclarationArchives(this.db,this.encrypt,this.decrypt).html(id)}
  undoDeclaration(input:UndoDeclarationInput){return new DeclarationStore(this.db,this.today).undo(input)}
  dashboard(day:string){return dashboardSummary(this.db,day)}
  findGuests(query:string){return new GuestDirectory(this.db).find(query)}

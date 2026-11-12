@@ -1,5 +1,6 @@
+import {assertArchiveIntegrity} from './archive-integrity'
 import Database from 'better-sqlite3'
-import {randomBytes,scryptSync,createCipheriv,createDecipheriv} from 'node:crypto'
+import {randomBytes,scryptSync,createCipheriv,createDecipheriv,createHash} from 'node:crypto'
 import {openSync,writeFileSync,closeSync,fsyncSync,rmSync} from 'node:fs'
 
 const MAGIC=Buffer.from('EVACAMP1','ascii'), MARKER='__eva_portable_identity_v1'
@@ -8,7 +9,8 @@ function verify(db:Database.Database){
  if(db.pragma('integrity_check',{simple:true})!=='ok')throw new Error('Database integrity check failed')
  if((db.pragma('foreign_key_check') as unknown[]).length)throw new Error('Database foreign keys are invalid')
  const version=db.prepare('SELECT MAX(version) AS version FROM schema_migrations').get() as {version:number}
- if(![1,2,3,4].includes(version.version))throw new Error('Unsupported database version')
+ if(![1,2,3,4,5].includes(version.version))throw new Error('Unsupported database version')
+ assertArchiveIntegrity(db,version.version)
 }
 function convertIdentities(db:Database.Database,convert:(value:Buffer)=>Buffer){
  // Rewrapping unchanged identities must not invalidate the signed form. Preserve
@@ -24,6 +26,18 @@ function convertIdentities(db:Database.Database,convert:(value:Buffer)=>Buffer){
  const update=db.prepare('UPDATE audit_log SET detail_json=? WHERE id=?')
  for(const change of changes){const value=JSON.parse(change.detail) as {before:string|null;after:string|null};for(const field of ['before','after'] as const)if(value[field])value[field]=convert(Buffer.from(value[field]!,'base64')).toString('base64');update.run(JSON.stringify(value),change.id)}
  if(version>=4){const restore=db.prepare('UPDATE declarations SET is_current=?,revision=? WHERE booking_id=?');for(const row of declarations)restore.run(row.is_current,row.revision,row.booking_id)}
+ if(version>=5){
+  const digest=(value:Buffer|string)=>createHash('sha256').update(value).digest('hex')
+  const fonts=db.prepare('SELECT bundle_hash AS hash,fonts_json AS json FROM declaration_archive_fonts').all() as {hash:string;json:string}[]
+  for(const font of fonts)if(digest(font.json)!==font.hash)throw new Error('ARCHIVE_INTEGRITY')
+  // A live iterator blocks writes on this connection. Page by primary key so
+  // each read finishes before updates, while keeping memory use bounded.
+  const select=db.prepare('SELECT id,document_ciphertext AS cipher,cipher_hash AS hash FROM declaration_archives WHERE id>? ORDER BY id LIMIT 5')
+  const update=db.prepare('UPDATE declaration_archives SET document_ciphertext=?,cipher_hash=? WHERE id=?')
+  let last=0
+  for(;;){const archives=select.all(last) as {id:number;cipher:Buffer;hash:string}[];if(!archives.length)break;for(const archive of archives){if(digest(archive.cipher)!==archive.hash)throw new Error('ARCHIVE_INTEGRITY');const next=convert(archive.cipher);update.run(next,digest(next),archive.id);last=archive.id}}
+ }
+
 }
 /** The only plaintext copy is held in memory; the resulting archive is encrypted and authenticated. */
 export function createPortableArchive(live:Database.Database,password:string,decrypt:(value:Buffer)=>string):Buffer {

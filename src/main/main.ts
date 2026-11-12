@@ -1,4 +1,4 @@
-import {saveDeclarationSchema,undoDeclarationSchema} from '../shared/declaration'
+import {saveDeclarationSchema,undoDeclarationSchema,archivePageSchema} from '../shared/declaration'
 import { app, BrowserWindow, ipcMain, dialog, safeStorage, Menu, protocol } from 'electron'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
@@ -35,14 +35,15 @@ app.whenReady().then(()=>{
   if(version===1){db.exec(readFileSync(join(app.getAppPath(),'db/migrations/0002_unit_segments.sql'),'utf8'));version=2}
   if(version===2){db.exec(readFileSync(join(app.getAppPath(),'db/migrations/0003_guest_lookup.sql'),'utf8'));version=3}
   if(version===3){db.exec(readFileSync(join(app.getAppPath(),'db/migrations/0004_declarations.sql'),'utf8'));version=4}
-  if(version!==4) throw new Error(`Unsupported database schema: ${version}`)
+  if(version===4){db.exec(readFileSync(join(app.getAppPath(),'db/migrations/0005_declaration_archives.sql'),'utf8'));version=5}
+  if(version!==5) throw new Error(`Unsupported database schema: ${version}`)
   let restoring=false
   let backupPending:Promise<unknown>=Promise.resolve()
   const backup=()=>{backupPending=track(backupPending.then(()=>createVerifiedBackup(db,join(dataDir,'backups'))).catch(error=>dialog.showErrorBox('Backup failed / تعذر النسخ الاحتياطي',String(error))));return backupPending}
   void backup()
   let backupTimer=setInterval(()=>{void backup()},60*60*1000)
   app.once('before-quit',()=>clearInterval(backupTimer))
-  const repository=new CampRepository(db,(value)=>{if(!safeStorage.isEncryptionAvailable())throw new Error('Identity encryption unavailable');return safeStorage.encryptString(value)},(value)=>{if(!safeStorage.isEncryptionAvailable())throw new Error('Identity decryption unavailable');return safeStorage.decryptString(value)})
+  const repository=new CampRepository(db,(value)=>{if(!safeStorage.isEncryptionAvailable())throw new Error('Identity encryption unavailable');return safeStorage.encryptString(value)},(value)=>{if(!safeStorage.isEncryptionAvailable())throw new Error('Identity decryption unavailable');return safeStorage.decryptString(value)},undefined,data=>{const logoPath=join(app.getAppPath(),'assets/logo.png');const logo=existsSync(logoPath)?`data:image/png;base64,${readFileSync(logoPath).toString('base64')}`:undefined;return {html:registrationHtml(data,fonts,logo),fonts}})
   const security=new AppLock(db)
   let window:BrowserWindow
   const publicChannels=new Set(['security:status','security:unlock'])
@@ -56,7 +57,7 @@ app.whenReady().then(()=>{
   handle('security:set',(_event,pin:unknown,current:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');security.setPin(pin,current);return security.status()})
   handle('security:disable',(_event,current:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');security.disable(current);return security.status()})
   handle('security:lock',()=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');security.lock();for(const view of BrowserWindow.getAllWindows())if(view!==window)view.close();printPages.clear();return security.status()})
-  protocol.handle('evaprint',request=>{const url=new URL(request.url);const key=url.pathname.slice(1);const html=url.hostname==='preview'&&request.method==='GET'?printPages.get(key):undefined;return html===undefined?new Response('Not found',{status:404}):new Response(html,{headers:{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'}})})
+  protocol.handle('evaprint',request=>{const url=new URL(request.url);const key=url.pathname.slice(1);const html=url.hostname==='preview'&&request.method==='GET'?printPages.get(key):undefined;return html===undefined?new Response('Not found',{status:404}):new Response(html,{headers:{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','Content-Security-Policy':"default-src 'none'; img-src data:; font-src data:; style-src 'unsafe-inline'"}})})
   const fontsDir=join(app.getAppPath(),'assets/fonts')
   const font=(name:string)=>readFileSync(join(fontsDir,name)).toString('base64')
   const fonts={serif:font('NotoSerif-Regular.ttf'),serifBold:font('NotoSerif-Bold.ttf'),arabic:font('NotoNaskhArabic-Regular.ttf'),arabicBold:font('NotoNaskhArabic-Bold.ttf')}
@@ -121,6 +122,8 @@ app.whenReady().then(()=>{
   handle('identity:replace',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');return repository.replaceIdentity(replaceIdentitySchema.parse(raw))})
   handle('identity:undo',(_event,id:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');repository.undoIdentity(statusSchema.shape.bookingId.parse(id))})
   handle('bookings:discount',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');repository.setDiscount(discountSchema.parse(raw))})
+  handle('declaration:archives',(_event,raw:unknown)=>{const d=archivePageSchema.parse(raw);return repository.listDeclarationArchives(d.bookingId,d.offset)})
+  handle('declaration:preview-archive',async (_event,id:unknown)=>{const archiveId=statusSchema.shape.bookingId.parse(id);await showPreview(repository.declarationArchiveHtml(archiveId),'Eva_Camp_Archived_Registration.pdf')})
   handle('declaration:get',(_event,id:unknown)=>repository.getDeclaration(statusSchema.shape.bookingId.parse(id)))
   handle('declaration:save',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');return repository.saveDeclaration(saveDeclarationSchema.parse(raw))})
   handle('declaration:undo',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');repository.undoDeclaration(undoDeclarationSchema.parse(raw))})

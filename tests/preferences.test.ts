@@ -10,7 +10,7 @@ import {CampRepository} from '../src/main/repository'
 
 describe('appearance and language preferences',()=>{
  let db:Database.Database,repo:CampRepository
- beforeEach(()=>{db=new Database(':memory:');for(const file of ['0001_initial.sql','0002_unit_segments.sql','0003_guest_lookup.sql','0004_declarations.sql'])db.exec(readFileSync(join(process.cwd(),'db/migrations',file),'utf8'));repo=new CampRepository(db)})
+ beforeEach(()=>{db=new Database(':memory:');for(const file of ['0001_initial.sql','0002_unit_segments.sql','0003_guest_lookup.sql','0004_declarations.sql','0005_declaration_archives.sql'])db.exec(readFileSync(join(process.cwd(),'db/migrations',file),'utf8'));repo=new CampRepository(db)})
  afterEach(()=>db.close())
  it('defaults to English and light appearance for existing databases',()=>{
   expect(repo.getPreferences()).toEqual({language:'en',theme:'light'})

@@ -50,6 +50,13 @@ Bookings can explicitly reuse an existing `guest_id`. Submitted guest field valu
 
 ## Schema 4: declarations and signature validity
 
-Every booking has a declaration row. Signatures are bounded vectors, stored with the confirmation, staff and date in SQLite; no external signature files are required. The application saves the declaration and its undo history transactionally. Database triggers increment a revision and invalidate the declaration when data shown on the registration form changes. Printing includes ink only while the declaration remains current. A stale revision cannot be saved or undone against a later edit. The signed form is not an immutable historical snapshot and the captured ink is not a certified digital signature.
+Every booking has a declaration row. Signatures are bounded vectors, stored with the confirmation, staff and date in SQLite; no external signature files are required. The application saves the declaration and its undo history transactionally. Database triggers increment a revision and invalidate the declaration when data shown on the registration form changes. Printing includes ink only while the declaration remains current. A stale revision cannot be saved or undone against a later edit. Schema 5 adds frozen historical forms as described below; the captured ink is not a certified digital signature.
 
 A version-3 migration creates missing declaration rows and treats legacy declarations as unverified, without reading legacy paths. Backup verification accepts version 4. Portable export and import preserve validity and revision only during the transactional conversion of unchanged identity ciphertext. The database and declaration history are not fully encrypted; a PIN is an application lock. Physical cross-computer recovery and printer acceptance remain outstanding.
+
+
+## Schema 5: frozen registration archives
+
+Each new declaration save and its frozen form commit in a single SQLite transaction. The original HTML template and data (including IDs and signature) are gzip-compressed and protected by safeStorage; logo data remains inside the protected document. Identical font bundles are content-addressed and shared across archives. Preview reconstructs the saved template and fonts; a response CSP blocks scripts and network access. The archive is frozen HTML, not an immutable PDF byte stream: a future Chromium renderer could lay it out differently. There is no backfill for prior declarations. Undo retains the archived record and displays its undone state.
+
+Backup and restore check ciphertext and font-bundle hashes before accepting snapshots, and local restore verifies decryptability. Portable export/import rewraps archive ciphertext alongside identities with bounded archive batches. The hashes detect accidental corruption, not deliberate tampering. Full database encryption, independent cryptographic review and physical cross-account/PC restore remain outstanding.
