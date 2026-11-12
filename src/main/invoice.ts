@@ -1,8 +1,9 @@
+import {piastersToInput} from '../shared/money-input'
 import {date as dateSchema} from '../shared/contracts'
 export type InvoiceData={reference:string;fullName:string;unitName:string;unitType:string;arrival:string;departure:string;status:string;basePiasters:number;discountPiasters:number;extrasPiasters:number;totalPiasters:number;paidPiasters:number;balancePiasters:number;extras:{description:string;quantity:number;unitPricePiasters:number}[];payments:{receiptNo:string;date:string;method:'cash'|'card'|'transfer';amountPiasters:number}[]}
 type Fonts={serif:string;serifBold:string;arabic:string;arabicBold:string}
 const escape=(value:unknown)=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!))
-const money=(n:number)=>(n/100).toFixed(2)
+const money=(n:number)=>piastersToInput(n)
 const date=(s:string)=>s.split('-').reverse().join('/')
 const methods={cash:['Cash','نقدي'],card:['Card','بطاقة'],transfer:['Transfer','تحويل']} as const
 const statuses:Record<string,[string,string]>={'reserved':['Reserved','محجوز'],'checked-in':['Checked in','مسجل وصول'],'checked-out':['Checked out','مسجل مغادرة'],'cancelled':['Cancelled','ملغي']}

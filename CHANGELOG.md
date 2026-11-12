@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Improve booking payment workflow with exact Arabic/English amount input, optional receipt notes, paginated payment history, receipt reprinting, refund receipts and guarded saves.
+
 - Archive each new guest declaration as a protected frozen registration form with shared bundled fonts, undo labels, paginated preview and backup/restore checks.
 
 - Add bilingual guest declarations, mouse/touch signature capture, guarded undo, registration printing, stale-signature invalidation and versioned backup-compatible migration.

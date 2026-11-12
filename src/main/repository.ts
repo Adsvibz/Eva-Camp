@@ -1,3 +1,4 @@
+import {paymentHistorySchema,type PaymentHistoryInput,type PaymentHistoryPage,type PaymentRow} from '../shared/contracts'
 import {DeclarationArchives,type ArchiveFactory} from './declaration-archives'
 import {DeclarationStore} from './declarations'
 import type {SaveDeclarationInput,UndoDeclarationInput} from '../shared/declaration'
@@ -100,11 +101,30 @@ export class CampRepository {
   this.audit('create','booking',id); return {id,reference}
  })() }
  listBookings():BookingRow[] { return this.db.prepare(`SELECT b.id,b.booking_reference AS reference,g.full_name AS fullName,u.name AS unitName,b.arrival_date AS arrival,b.departure_date AS departure,b.status,v.total_piasters AS totalPiasters,v.paid_piasters AS paidPiasters,v.balance_piasters AS balancePiasters FROM bookings b JOIN guests g ON g.id=b.guest_id JOIN units u ON u.id=b.unit_id JOIN booking_balances v ON v.booking_id=b.id WHERE b.deleted_at IS NULL ORDER BY b.arrival_date DESC,b.id DESC LIMIT 500`).all() as BookingRow[] }
- addPayment(data:PaymentInput):number { const d=paymentSchema.parse(data); return this.db.transaction(()=>{ if(this.db.prepare('SELECT key FROM settings WHERE key=?').get(`closed-day:${d.date}`))throw new Error('Day is closed'); const booking=this.db.prepare("SELECT status FROM bookings WHERE id=? AND deleted_at IS NULL").get(d.bookingId) as {status:string}|undefined; if(!booking||(booking.status==='cancelled'&&d.amountPiasters>0)) throw new Error('Booking unavailable'); if(d.amountPiasters<0){const paid=(this.db.prepare("SELECT paid_piasters AS paid FROM booking_balances WHERE booking_id=?").get(d.bookingId) as {paid:number}).paid;if(-d.amountPiasters>paid)throw new Error('Refund exceeds net paid amount')} const year=Number(d.date.slice(0,4)); const receipt=`R-${year}-${String(this.sequence('receipt',year)).padStart(4,'0')}`; const id=Number(this.db.prepare('INSERT INTO payments(booking_id,amount_piasters,method,payment_date,receipt_no) VALUES (?,?,?,?,?)').run(d.bookingId,d.amountPiasters,d.method,d.date,receipt).lastInsertRowid);this.audit('create','payment',id);return id })() }
-
+ addPayment(data:PaymentInput):number {
+  const d=paymentSchema.parse(data)
+  return this.db.transaction(()=>{
+   if(this.db.prepare('SELECT key FROM settings WHERE key=?').get(`closed-day:${d.date}`))throw new Error('Day is closed')
+   const booking=this.db.prepare("SELECT status FROM bookings WHERE id=? AND deleted_at IS NULL").get(d.bookingId) as {status:string}|undefined
+   if(!booking||(booking.status==='cancelled'&&d.amountPiasters>0))throw new Error('Booking unavailable')
+   const row=this.db.prepare('SELECT paid_piasters AS paid FROM booking_balances WHERE booking_id=?').get(d.bookingId) as {paid:number}
+   if(!Number.isSafeInteger(row.paid)||row.paid<0)throw new Error('PAYMENT_AMOUNT_TOO_LARGE')
+   if(d.amountPiasters<0&&-d.amountPiasters>row.paid)throw new Error('Refund exceeds net paid amount')
+   if(d.amountPiasters>0&&row.paid>Number.MAX_SAFE_INTEGER-d.amountPiasters)throw new Error('PAYMENT_AMOUNT_TOO_LARGE')
+   const year=Number(d.date.slice(0,4)),receipt=`R-${year}-${String(this.sequence('receipt',year)).padStart(4,'0')}`
+   const id=Number(this.db.prepare('INSERT INTO payments(booking_id,amount_piasters,method,payment_date,receipt_no,note) VALUES (?,?,?,?,?,?)').run(d.bookingId,d.amountPiasters,d.method,d.date,receipt,d.note||null).lastInsertRowid)
+   this.audit('create','payment',id);return id
+  })()
+ }
+ listPayments(input:PaymentHistoryInput):PaymentHistoryPage {
+  const d=paymentHistorySchema.parse(input)
+  if(!this.db.prepare('SELECT id FROM bookings WHERE id=? AND deleted_at IS NULL').get(d.bookingId))throw new Error('Booking unavailable')
+  const rows=this.db.prepare("SELECT id,receipt_no AS receiptNo,payment_date AS date,method,amount_piasters AS amountPiasters,COALESCE(note,'') AS note FROM payments WHERE booking_id=? AND deleted_at IS NULL ORDER BY id DESC LIMIT 51 OFFSET ?").all(d.bookingId,d.offset) as PaymentRow[]
+  return {rows:rows.slice(0,50),hasMore:rows.length>50}
+ }
 
  receiptData(id:number):ReceiptData {
-  const row=this.db.prepare(`SELECT p.receipt_no AS receiptNo,g.full_name AS guestName,b.booking_reference AS reference,p.amount_piasters AS amountPiasters,p.method,p.payment_date AS date FROM payments p JOIN bookings b ON b.id=p.booking_id JOIN guests g ON g.id=b.guest_id WHERE p.id=? AND p.deleted_at IS NULL`).get(id) as ReceiptData|undefined
+  const row=this.db.prepare(`SELECT p.receipt_no AS receiptNo,g.full_name AS guestName,b.booking_reference AS reference,p.amount_piasters AS amountPiasters,p.method,p.payment_date AS date,COALESCE(p.note,'') AS note FROM payments p JOIN bookings b ON b.id=p.booking_id JOIN guests g ON g.id=b.guest_id WHERE p.id=? AND p.deleted_at IS NULL`).get(id) as ReceiptData|undefined
   if(!row)throw new Error('Payment not found')
   return row
  }

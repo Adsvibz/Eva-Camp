@@ -2,7 +2,7 @@ import { z } from 'zod'
 export const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(v => { const d = new Date(v + 'T00:00:00Z'); return !isNaN(d.valueOf()) && d.toISOString().slice(0,10) === v }, 'Invalid date')
 export const unitSchema = z.object({name:z.string().trim().min(1).max(80),type:z.string().trim().min(1).max(80),capacity:z.number().int().min(1).max(100),pricePiasters:z.number().int().min(0).safe()})
 export const bookingSchema = z.object({guestId:z.number().int().positive().optional(),allowSharedPhone:z.boolean().optional(),fullName:z.string().trim().min(1).max(200),phone:z.string().trim().max(50),unitId:z.number().int().positive(),arrival:date,departure:date,adults:z.number().int().min(1).max(100),children:z.number().int().min(0).max(100),totalPiasters:z.number().int().min(0).safe(),source:z.enum(['walk-in','phone','whatsapp','agency']),nationality:z.string().trim().max(120).optional(),email:z.union([z.string().trim().email().max(254),z.literal('')]).optional(),dateOfBirth:z.union([date,z.literal('')]).optional(),country:z.string().trim().max(100).optional(),address:z.string().trim().max(500).optional(),notes:z.string().trim().max(4000).optional(),idNumber:z.string().trim().max(100).optional(),companions:z.array(z.object({fullName:z.string().trim().min(1).max(200),idNumber:z.string().trim().max(100).optional()})).optional()}).refine(x=>x.arrival<x.departure,{message:'Departure must be after arrival'})
-export const paymentSchema = z.object({bookingId:z.number().int().positive(),amountPiasters:z.number().int().safe().refine(v=>v!==0),method:z.enum(['cash','card','transfer']),date})
+export const paymentSchema = z.object({bookingId:z.number().int().positive(),amountPiasters:z.number().int().safe().refine(v=>v!==0),method:z.enum(['cash','card','transfer']),date,note:z.string().trim().max(500).optional()})
 export type UnitInput = z.infer<typeof unitSchema>
 export type BookingInput = z.infer<typeof bookingSchema>
 export type PaymentInput = z.infer<typeof paymentSchema>
@@ -58,3 +58,8 @@ export type BookingExtra={id:number;description:string;quantity:number;unitPrice
 
 export const discountSchema=z.object({bookingId:z.number().int().positive().safe(),discountPiasters:z.number().int().min(0).safe(),expectedDiscountPiasters:z.number().int().min(0).safe()}).strict()
 export type DiscountInput=z.infer<typeof discountSchema>
+
+export const paymentHistorySchema=z.object({bookingId:z.number().int().positive().safe(),offset:z.number().int().min(0).max(1000000)}).strict()
+export type PaymentHistoryInput=z.infer<typeof paymentHistorySchema>
+export type PaymentRow={id:number;receiptNo:string;date:string;method:'cash'|'card'|'transfer';amountPiasters:number;note:string}
+export type PaymentHistoryPage={rows:PaymentRow[];hasMore:boolean}

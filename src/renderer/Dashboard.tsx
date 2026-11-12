@@ -1,3 +1,4 @@
+import {formatEgp} from '../shared/money-input'
 import React, {useEffect, useState} from 'react'
 import type {DashboardStay, DashboardSummary} from '../shared/contracts'
 
@@ -11,7 +12,7 @@ export function Dashboard({lang,revision,onSelect,onCalendar}:{lang:'en'|'ar';re
  useEffect(()=>{const update=()=>setDay(localDay());const timer=window.setInterval(update,60000);window.addEventListener('focus',update);return()=>{window.clearInterval(timer);window.removeEventListener('focus',update)}},[])
  useEffect(()=>{let active=true;setData(null);setError(false);window.eva.dashboard(day).then(value=>{if(active)setData(value)}).catch(()=>{if(active)setError(true)});return()=>{active=false}},[day,revision,retry])
  const num=(n:number)=>new Intl.NumberFormat(lang==='ar'?'ar-EG':'en-EG',{maximumFractionDigits:1}).format(n)
- const money=(n:number)=>`${new Intl.NumberFormat(lang==='ar'?'ar-EG':'en-EG',{minimumFractionDigits:2,maximumFractionDigits:2}).format(n/100)} EGP`
+ const money=(n:number)=>formatEgp(n,lang)
  if(error)return <section className="dashboard-message" role="alert">{t.error} <button className="text-button" onClick={()=>setRetry(n=>n+1)}>{t.retry}</button></section>
  if(!data)return <section className="dashboard-message" role="status">{t.loading}</section>
  const cards=[[t.arrivals,num(data.arrivalsCount),''],[t.departures,num(data.departuresCount),''],[t.inHouse,num(data.inHouseGuests),`${num(data.inHouseBookings)} ${t.stays}`],[t.occupancy,`${num(data.occupancyPercent)}%`,`${num(data.occupiedUnits)} / ${num(data.totalUnits)} ${t.units}`],[t.todayMoney,money(data.todayCollectionsPiasters),''],[t.monthMoney,money(data.monthCollectionsPiasters),''],[t.outstanding,money(data.outstandingPiasters),'']]

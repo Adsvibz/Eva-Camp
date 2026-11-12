@@ -9,6 +9,7 @@ const packagedData=fs.mkdtempSync(path.join(os.tmpdir(),'eva-packaged-ui-'))
 const artifacts=path.join(root,'test-results')
 fs.mkdirSync(artifacts,{recursive:true})
 let app,page
+let acceptDialogs=true
 const errors=[]
 const name='مريم أحمد'
 const day='2026-11-10'
@@ -43,7 +44,7 @@ async function preview(action,filename,text,minimumPages=1){
 async function booking(arrival,departure){
  await page.getByRole('button',{name:'New booking',exact:true}).click()
  await page.locator('select[name="unit"]').selectOption({label:'A'})
- await fill('arrival',arrival);await fill('departure',departure);await fill('total','1000')
+ await fill('arrival',arrival);await fill('departure',departure);await fill('total','١٠٠٠')
 }
 ;(async()=>{
  app=await electron.launch({args:[path.join(root,'electron-test-bootstrap.cjs')],env:{...process.env,EVA_TEST_DATA_DIR:data},timeout:30000})
@@ -51,7 +52,7 @@ async function booking(arrival,departure){
  const electronVersion=await app.evaluate(()=>process.versions.electron)
  assert.ok(Number(electronVersion.split('.')[0])>=45,`Unexpected Electron version: ${electronVersion}`)
  page.on('pageerror',error=>errors.push(error.message))
- page.on('dialog',dialog=>dialog.accept())
+ page.on('dialog',dialog=>acceptDialogs?dialog.accept():dialog.dismiss())
  await page.getByRole('button',{name:'New booking',exact:true}).waitFor()
  await page.getByRole('heading',{name:'Front desk today'}).waitFor()
  assert.equal((await page.evaluate(day=>window.eva.dashboard(day),day)).totalUnits,0)
@@ -77,12 +78,12 @@ async function booking(arrival,departure){
  await page.locator('nav').getByRole('button',{name:'Units',exact:true}).click()
  for(const unit of ['A','B']){
   await page.getByRole('button',{name:'Add unit',exact:true}).click()
-  await fill('name',unit);await fill('type','Room');await fill('capacity','3');await fill('price','500');await save()
+  await fill('name',unit);await fill('type','Room');await fill('capacity','3');await fill('price','٥٠٠٫٢٩');await save()
   await page.locator('.overlay').waitFor({state:'hidden'})
  }
  await page.getByRole('button',{name:'Edit unit: B',exact:true}).click()
  await page.getByLabel('Housekeeping status',{exact:true}).selectOption('cleaning');await page.getByLabel('Notes',{exact:true}).fill('Test cleaning');await page.getByRole('button',{name:'Save changes',exact:true}).click();await page.locator('.overlay').waitFor({state:'hidden'})
- let unitB=(await page.evaluate(()=>window.eva.listUnits())).find(x=>x.name==='B');assert.equal(unitB.housekeepingStatus,'cleaning');assert.equal(unitB.notes,'Test cleaning')
+ let unitB=(await page.evaluate(()=>window.eva.listUnits())).find(x=>x.name==='B');assert.equal(unitB.housekeepingStatus,'cleaning');assert.equal(unitB.notes,'Test cleaning');assert.equal(unitB.pricePiasters,50029)
  const rejected=await page.evaluate(async unitId=>{try{await window.eva.createBooking({fullName:'Unavailable',phone:'',unitId,arrival:'2026-12-01',departure:'2026-12-02',adults:1,children:0,totalPiasters:0,source:'phone'});return false}catch(e){return String(e).includes('Unit unavailable')}},unitB.id);assert.equal(rejected,true)
  await page.getByRole('button',{name:'Edit unit: B',exact:true}).click();await page.getByLabel('Housekeeping status',{exact:true}).selectOption('available');await page.getByRole('button',{name:'Save changes',exact:true}).click();await page.locator('.overlay').waitFor({state:'hidden'})
  unitB=(await page.evaluate(()=>window.eva.listUnits())).find(x=>x.name==='B');assert.equal(unitB.housekeepingStatus,'available')
@@ -90,7 +91,7 @@ async function booking(arrival,departure){
  await booking(day,'2026-11-14')
  await fill('name',name);await fill('phone','٠١٢٢٠٧٥٥٧٥٥');await fill('nationality','Egyptian');await fill('idNumber','E2E-PRIMARY')
  await page.getByRole('button',{name:'Add companion',exact:true}).click()
- await fill('companionName0','علي أحمد');await fill('companionId0','E2E-COMPANION');await save()
+ await fill('companionName0','علي أحمد');await fill('companionId0','E2E-COMPANION');await page.locator('.dialog > form').evaluate(form=>{form.requestSubmit();form.requestSubmit()})
  await page.locator('.overlay').waitFor({state:'hidden'})
  let rows=await page.evaluate(()=>window.eva.listBookings());assert.equal(rows.length,1)
  const first=await page.evaluate(id=>window.eva.getBooking(id),rows[0].id)
@@ -114,7 +115,24 @@ async function booking(arrival,departure){
  await page.getByRole('heading',{name:'Front desk today'}).waitFor()
  await page.screenshot({path:path.join(artifacts,'dashboard.png'),fullPage:true})
  await page.getByRole('button',{name,exact:true}).click()
- await page.getByLabel('Service',{exact:true}).selectOption('meals');await page.getByLabel('Quantity',{exact:true}).fill('2');await page.getByLabel('Price each (EGP)',{exact:true}).fill('100');await page.getByRole('button',{name:'Add service',exact:true}).click()
+ // Reception can take a partial payment from booking details without leaving the guest.
+ await page.locator('.dialog').getByRole('button',{name:'Record payment',exact:true}).click()
+ assert.ok((await page.locator('.payment-context').innerText()).includes(name))
+ await page.locator('.dialog').screenshot({path:path.join(artifacts,'payment-details-en.png')})
+ assert.equal(await page.getByRole('dialog').count(),1)
+ await page.locator('.dialog .form-actions .primary').focus();await page.keyboard.press('Tab');assert.equal(await page.evaluate(()=>document.activeElement?.getAttribute('aria-label')),'Close')
+ await page.getByLabel('Amount (EGP)',{exact:true}).fill('٠٫٢٩');await page.getByLabel('Date',{exact:true}).fill(day);await page.getByLabel('Note (optional)',{exact:true}).fill('دفعة تجريبية')
+ await preview(()=>page.locator('.payment-form').evaluate(form=>{form.requestSubmit();form.requestSubmit()}),'receipt-partial','0.29')
+ await page.locator('.payment-history-row').filter({hasText:'دفعة تجريبية'}).waitFor()
+ let payments=await page.evaluate(id=>window.eva.listPayments({bookingId:id,offset:0}),first.id);assert.equal(payments.rows.length,2);assert.equal(payments.rows[0].amountPiasters,29)
+ assert.equal((await page.evaluate(id=>window.eva.getBooking(id),first.id)).paidPiasters,25029)
+ await preview(()=>page.getByRole('button',{name:`Open receipt: ${payments.rows[0].receiptNo}`,exact:true}).click(),'receipt-reprint','دفعة تجريبية')
+ await page.locator('.dialog').getByRole('button',{name:'Record payment',exact:true}).click()
+ await page.getByLabel('Transaction',{exact:true}).selectOption('refund');await page.getByLabel('Amount (EGP)',{exact:true}).fill('0.29');await page.getByLabel('Date',{exact:true}).fill(day)
+ await preview(()=>page.locator('.payment-form').getByRole('button',{name:'Save and open receipt',exact:true}).click(),'receipt-refund','REFUND RECEIPT')
+ assert.equal((await page.evaluate(id=>window.eva.getBooking(id),first.id)).paidPiasters,25000)
+ payments=await page.evaluate(id=>window.eva.listPayments({bookingId:id,offset:0}),first.id);assert.equal(payments.rows.length,3);assert.equal(payments.rows[0].amountPiasters,-29)
+ await page.getByLabel('Service',{exact:true}).selectOption('meals');await page.getByLabel('Quantity',{exact:true}).fill('2');await page.getByLabel('Price each (EGP)',{exact:true}).fill('١٠٠');await page.getByRole('button',{name:'Add service',exact:true}).click()
  await page.waitForFunction(async id=>(await window.eva.getBooking(id)).extrasPiasters===20000,first.id)
  let withExtras=await page.evaluate(id=>window.eva.getBooking(id),first.id);assert.equal(withExtras.totalDuePiasters,120000);assert.equal(withExtras.balancePiasters,95000)
  await page.locator('.extras').getByRole('button',{name:'Remove',exact:true}).click();await page.locator('.extras').getByRole('button',{name:'Undo removal',exact:true}).waitFor();await page.locator('.extras').getByRole('button',{name:'Undo removal',exact:true}).click();await page.waitForFunction(async id=>(await window.eva.getBooking(id)).extrasPiasters===20000,first.id)
@@ -202,6 +220,14 @@ async function booking(arrival,departure){
  await page.getByRole('button',{name:'Reopen day',exact:true}).waitFor()
  assert.equal((await page.evaluate(day=>window.eva.dailyReport(day),day)).closed,true)
  await closeModal()
+ await page.getByRole('button',{name,exact:true}).first().click()
+ await page.locator('.dialog').getByRole('button',{name:'Record payment',exact:true}).click()
+ await page.getByLabel('Amount (EGP)',{exact:true}).fill('1');await page.getByLabel('Date',{exact:true}).fill(day)
+ await page.getByRole('button',{name:'Save and open receipt',exact:true}).click()
+ await page.getByRole('alert').filter({hasText:'This day is closed.'}).waitFor()
+ await page.getByRole('button',{name:'Back to booking',exact:true}).click()
+ await page.getByRole('heading',{name:'Booking details'}).waitFor();await closeModal()
+
  await page.getByRole('button',{name:'العربية',exact:true}).click()
  await page.waitForFunction(()=>document.documentElement.lang==='ar')
  assert.equal(await page.locator('.app').getAttribute('dir'),'rtl')
@@ -210,6 +236,15 @@ async function booking(arrival,departure){
  await page.getByRole('button',{name:/استخدام بيانات العميل/}).click()
  assert.equal(await page.locator('input[name="name"]').inputValue(),name)
  await page.screenshot({path:path.join(artifacts,'returning-guest-arabic.png'),fullPage:true})
+ await closeModal()
+ await page.getByRole('button',{name,exact:true}).first().click()
+ await page.locator('.dialog').getByRole('button',{name:'تسجيل دفعة',exact:true}).click()
+ await page.getByLabel('المبلغ (ج.م)',{exact:true}).waitFor()
+ await page.locator('.dialog').screenshot({path:path.join(artifacts,'payment-details-ar.png')})
+ await page.getByLabel('المبلغ (ج.م)',{exact:true}).fill('٢')
+ acceptDialogs=false;await page.keyboard.press('Escape');await page.getByLabel('المبلغ (ج.م)',{exact:true}).waitFor();assert.equal(await page.getByLabel('المبلغ (ج.م)',{exact:true}).inputValue(),'٢')
+ acceptDialogs=true;await page.getByRole('button',{name:'العودة للحجز',exact:true}).click()
+ await page.getByRole('heading',{name:'تفاصيل الحجز'}).waitFor()
  await closeModal();assert.deepEqual(errors,[])
  await app.close();app=null
  // Relaunch the actual app against the same isolated data directory.

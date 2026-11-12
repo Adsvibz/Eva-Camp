@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto'
 import { readFileSync, writeFileSync, existsSync, rmSync, mkdirSync, statSync } from 'node:fs'
 import Database from 'better-sqlite3'
 import { CampRepository } from './repository'
-import {discountSchema,addExtraSchema,extraRefSchema,updateUnitSchema} from '../shared/contracts'
+import {paymentHistorySchema,discountSchema,addExtraSchema,extraRefSchema,updateUnitSchema} from '../shared/contracts'
 import { AppLock } from './lock'
 import {invoiceHtml} from './invoice'
 import { registrationHtml, receiptHtml, closingHtml } from './print'
@@ -150,6 +150,7 @@ app.whenReady().then(()=>{
   handle('bookings:get',(_event,id:unknown)=>repository.getBooking(statusSchema.shape.bookingId.parse(id)))
   handle('bookings:status',(_event,data:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');const d=statusSchema.parse(data);repository.changeStatus(d.bookingId,d.status)})
   handle('bookings:create',(_event,data:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');return repository.createBooking(bookingSchema.parse(data))})
+  handle('payments:list',(_event,data:unknown)=>repository.listPayments(paymentHistorySchema.parse(data)))
   handle('payments:create',(_event,data:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');return repository.addPayment(paymentSchema.parse(data))})
   window=new BrowserWindow({width:1280,height:820,minWidth:900,minHeight:650,show:false,backgroundColor:'#f4f4f2',webPreferences:{preload:join(__dirname,'../preload/preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true}})
   window.once('ready-to-show',()=>window.show())
