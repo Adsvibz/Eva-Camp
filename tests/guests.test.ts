@@ -110,4 +110,17 @@ describe('returning guests',()=>{
   expect(()=>repo.createBooking({...input(),phone:'',arrival:'2026-11-03',departure:'2026-11-04'})).not.toThrow()
  })
 
+ it('protects identity changes against a matching primary guest while allowing the current guest',()=>{
+  const first=repo.createBooking(input()),other=repo.createBooking({...input(),fullName:'Other',phone:'',idNumber:'OTHER',arrival:'2026-11-03',departure:'2026-11-04'})
+  const before=repo.countAudit()
+  expect(()=>repo.replaceIdentity({bookingId:other.id,kind:'primary',idNumber:'secret-id'})).toThrow('DUPLICATE_IDENTITY')
+  expect(repo.countAudit()).toBe(before);expect(repo.registrationData(other.id).idNumber).toBe('OTHER')
+  const same=repo.replaceIdentity({bookingId:first.id,kind:'primary',idNumber:'SECRET-ID'});expect(same).toBeGreaterThan(0)
+  const confirmed=repo.replaceIdentity({bookingId:other.id,kind:'primary',idNumber:'SECRET-ID',allowDuplicateIdentity:true})
+  expect(repo.findGuestsByIdentity('SECRET-ID')).toHaveLength(2)
+  const record=db.prepare("SELECT detail_json AS detail FROM audit_log WHERE id=?").get(confirmed) as {detail:string}
+  expect(JSON.parse(record.detail).duplicateIdentityConfirmed).toBe(true);expect(record.detail).not.toContain('SECRET-ID')
+  repo.undoIdentity(confirmed);expect(repo.registrationData(other.id).idNumber).toBe('OTHER')
+ })
+
 })

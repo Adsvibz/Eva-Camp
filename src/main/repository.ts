@@ -218,10 +218,12 @@ export class CampRepository {
   const d=replaceIdentitySchema.parse(input);return this.db.transaction(()=>{
    const b=this.activeBooking(d.bookingId);const record=d.kind==='primary'?this.db.prepare('SELECT id_passport_ciphertext AS cipher FROM guests WHERE id=?').get(b.guestId):this.db.prepare('SELECT id_passport_ciphertext AS cipher FROM additional_guests WHERE id=? AND booking_id=? AND deleted_at IS NULL').get(d.companionId,d.bookingId)
    if(!record)throw new Error('Identity unavailable');const before=(record as {cipher:Buffer|null}).cipher;let after:Buffer|null=null
+   const duplicateIdentity=d.kind==='primary'&&!!d.idNumber&&(this.findGuestsByIdentity(d.idNumber) as {id:number}[]).some(g=>g.id!==b.guestId)
+   if(duplicateIdentity&&d.kind==='primary'&&!d.allowDuplicateIdentity)throw new Error('DUPLICATE_IDENTITY')
    if(d.idNumber){if(!this.encrypt)throw new Error('Identity encryption unavailable');after=this.encrypt(d.idNumber)}
    if(d.kind==='primary')this.db.prepare('UPDATE guests SET id_passport_ciphertext=?,id_passport_lookup=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(after,new IdentityLookup(this.db,this.encrypt,this.decrypt).forWrite(d.idNumber),b.guestId)
    else this.db.prepare('UPDATE additional_guests SET id_passport_ciphertext=?,id_passport_lookup=NULL WHERE id=? AND booking_id=?').run(after,d.companionId,d.bookingId)
-   const detail={bookingId:d.bookingId,kind:d.kind,entityId:d.kind==='primary'?b.guestId:d.companionId,before:before?.toString('base64')??null,after:after?.toString('base64')??null}
+   const detail={bookingId:d.bookingId,kind:d.kind,entityId:d.kind==='primary'?b.guestId:d.companionId,before:before?.toString('base64')??null,after:after?.toString('base64')??null,...(duplicateIdentity?{duplicateIdentityConfirmed:true}:{})}
    return Number(this.db.prepare('INSERT INTO audit_log(actor,action,entity_type,entity_id,detail_json) VALUES (?,?,?,?,?)').run('operator','identity-change',d.kind,String(detail.entityId),JSON.stringify(detail)).lastInsertRowid)
   })()
  }
