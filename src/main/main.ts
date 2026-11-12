@@ -137,7 +137,7 @@ app.whenReady().then(()=>{
   handle('companions:add',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');return repository.addCompanion(addCompanionSchema.parse(raw))})
   handle('companions:update',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');repository.updateCompanion(updateCompanionSchema.parse(raw))})
   handle('companions:remove',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');const d=companionRefSchema.parse(raw);repository.removeCompanion(d.bookingId,d.companionId)})
-  handle('companions:restore',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');const d=companionRefSchema.parse(raw);repository.restoreCompanion(d.bookingId,d.companionId)})
+  handle('companions:restore',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');const d=companionRefSchema.parse(raw);repository.restoreCompanion(d.bookingId,d.companionId,d.allowDuplicateIdentity)})
   handle('bookings:update-details',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');repository.updateBookingDetails(bookingDetailsSchema.parse(raw))})
   handle('preferences:get',()=>repository.getPreferences())
   handle('preferences:save',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');repository.savePreferences(uiPreferencesSchema.parse(raw))})

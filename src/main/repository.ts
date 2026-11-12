@@ -1,4 +1,4 @@
-import {IdentityLookup} from './identity-lookup'
+import {IdentityLookup,normalizeIdentity} from './identity-lookup'
 import {unitAvailabilitySchema,type UnitAvailabilityInput,type UnitAvailability} from '../shared/contracts'
 import {paymentHistorySchema,type PaymentHistoryInput,type PaymentHistoryPage,type PaymentRow} from '../shared/contracts'
 import {DeclarationArchives,type ArchiveFactory} from './declaration-archives'
@@ -65,6 +65,13 @@ export class CampRepository {
    )=@unit LIMIT 1`).get({id:bookingId,day,unit:unitId})
   if(conflict)throw new Error('UNIT_OCCUPIED')
  }
+ private sameBookingIdentityConflict(bookingId:number,idNumber:string,exclude:{kind:'primary'|'companion';id?:number}):boolean{
+  if(!idNumber)return false
+  const desired=normalizeIdentity(idNumber)
+  const rows=this.db.prepare(`SELECT 'primary' AS kind,g.id AS id,g.id_passport_ciphertext AS cipher FROM bookings b JOIN guests g ON g.id=b.guest_id WHERE b.id=? AND b.deleted_at IS NULL AND g.id_passport_ciphertext IS NOT NULL UNION ALL SELECT 'companion' AS kind,c.id AS id,c.id_passport_ciphertext AS cipher FROM additional_guests c WHERE c.booking_id=? AND c.deleted_at IS NULL AND c.id_passport_ciphertext IS NOT NULL`).all(bookingId,bookingId) as {kind:'primary'|'companion';id:number;cipher:Buffer}[]
+  for(const row of rows){if(row.kind===exclude.kind&&(row.kind==='primary'||row.id===exclude.id))continue;if(!this.decrypt)throw new Error('Identity decryption unavailable');if(normalizeIdentity(this.decrypt(row.cipher))===desired)return true}
+  return false
+ }
  private audit(action:string,entity:string,id:number|string) { this.db.prepare('INSERT INTO audit_log(actor,action,entity_type,entity_id) VALUES (?,?,?,?)').run('operator',action,entity,String(id)) }
  private sequence(name:string,year:number):number {
   this.db.prepare('INSERT INTO sequences(name,year,value) VALUES (?,?,1) ON CONFLICT(name,year) DO UPDATE SET value=value+1').run(name,year)
@@ -115,7 +122,12 @@ export class CampRepository {
   }
   const year=Number(d.arrival.slice(0,4)); const reference=`EVA-${year}-${String(this.sequence('booking',year)).padStart(4,'0')}`
   const id=Number(this.db.prepare("INSERT INTO bookings(booking_reference,guest_id,unit_id,arrival_date,departure_date,adults_count,children_count,total_piasters,status,source) VALUES (?,?,?,?,?,?,?,?,'reserved',?)").run(reference,guestId,d.unitId,d.arrival,d.departure,d.adults,d.children,d.totalPiasters,d.source).lastInsertRowid)
-  for(const companion of d.companions||[]) this.db.prepare('INSERT INTO additional_guests(booking_id,full_name,id_passport_ciphertext) VALUES (?,?,?)').run(id,companion.fullName,protect(companion.idNumber))
+  for(const companion of d.companions||[]){
+   const conflict=!!companion.idNumber&&this.sameBookingIdentityConflict(id,companion.idNumber,{kind:'companion'})
+   if(conflict&&!companion.allowDuplicateIdentity)throw new Error('COMPANION_IDENTITY_CONFLICT')
+   const companionId=Number(this.db.prepare('INSERT INTO additional_guests(booking_id,full_name,id_passport_ciphertext) VALUES (?,?,?)').run(id,companion.fullName,protect(companion.idNumber)).lastInsertRowid)
+   if(conflict)this.audit('companion-identity-confirmed','companion',companionId)
+  }
   this.audit('create','booking',id); return {id,reference}
  })() }
  listBookings():BookingRow[] { return this.db.prepare(`SELECT b.id,b.booking_reference AS reference,g.full_name AS fullName,u.name AS unitName,b.arrival_date AS arrival,b.departure_date AS departure,b.status,v.total_piasters AS totalPiasters,v.paid_piasters AS paidPiasters,v.balance_piasters AS balancePiasters FROM bookings b JOIN guests g ON g.id=b.guest_id JOIN units u ON u.id=b.unit_id JOIN booking_balances v ON v.booking_id=b.id WHERE b.deleted_at IS NULL ORDER BY b.arrival_date DESC,b.id DESC LIMIT 500`).all() as BookingRow[] }
@@ -203,7 +215,7 @@ export class CampRepository {
   return b
  }
  addCompanion(input:AddCompanionInput):number{
-  const d=addCompanionSchema.parse(input);return this.db.transaction(()=>{this.activeBooking(d.bookingId);let cipher:Buffer|null=null;if(d.idNumber){if(!this.encrypt)throw new Error('Identity encryption unavailable');cipher=this.encrypt(d.idNumber)}const id=Number(this.db.prepare('INSERT INTO additional_guests(booking_id,full_name,id_passport_ciphertext) VALUES (?,?,?)').run(d.bookingId,d.fullName,cipher).lastInsertRowid);this.audit('create','companion',id);return id})()
+  const d=addCompanionSchema.parse(input);return this.db.transaction(()=>{this.activeBooking(d.bookingId);const conflict=!!d.idNumber&&this.sameBookingIdentityConflict(d.bookingId,d.idNumber,{kind:'companion'});if(conflict&&!d.allowDuplicateIdentity)throw new Error('COMPANION_IDENTITY_CONFLICT');let cipher:Buffer|null=null;if(d.idNumber){if(!this.encrypt)throw new Error('Identity encryption unavailable');cipher=this.encrypt(d.idNumber)}const id=Number(this.db.prepare('INSERT INTO additional_guests(booking_id,full_name,id_passport_ciphertext) VALUES (?,?,?)').run(d.bookingId,d.fullName,cipher).lastInsertRowid);this.audit('create','companion',id);if(conflict)this.audit('companion-identity-confirmed','companion',id);return id})()
  }
  updateCompanion(input:UpdateCompanionInput):void{
   const d=updateCompanionSchema.parse(input);this.db.transaction(()=>{this.activeBooking(d.bookingId);const changed=this.db.prepare('UPDATE additional_guests SET full_name=? WHERE id=? AND booking_id=? AND deleted_at IS NULL').run(d.fullName,d.companionId,d.bookingId);if(!changed.changes)throw new Error('Companion unavailable');this.audit('update','companion',d.companionId)})()
@@ -211,15 +223,15 @@ export class CampRepository {
  removeCompanion(bookingId:number,companionId:number):void{
   companionRefSchema.parse({bookingId,companionId});this.db.transaction(()=>{this.activeBooking(bookingId);const changed=this.db.prepare('UPDATE additional_guests SET deleted_at=CURRENT_TIMESTAMP WHERE id=? AND booking_id=? AND deleted_at IS NULL').run(companionId,bookingId);if(!changed.changes)throw new Error('Companion unavailable');this.audit('remove','companion',companionId)})()
  }
- restoreCompanion(bookingId:number,companionId:number):void{
-  companionRefSchema.parse({bookingId,companionId});this.db.transaction(()=>{this.activeBooking(bookingId);const changed=this.db.prepare('UPDATE additional_guests SET deleted_at=NULL WHERE id=? AND booking_id=? AND deleted_at IS NOT NULL').run(companionId,bookingId);if(!changed.changes)throw new Error('Companion unavailable');this.audit('restore','companion',companionId)})()
+ restoreCompanion(bookingId:number,companionId:number,allowDuplicateIdentity=false):void{
+  companionRefSchema.parse({bookingId,companionId,allowDuplicateIdentity});this.db.transaction(()=>{this.activeBooking(bookingId);const old=this.db.prepare('SELECT id_passport_ciphertext AS cipher FROM additional_guests WHERE id=? AND booking_id=? AND deleted_at IS NOT NULL').get(companionId,bookingId) as {cipher:Buffer|null}|undefined;if(!old)throw new Error('Companion unavailable');if(old.cipher&&!this.decrypt)throw new Error('Identity decryption unavailable');const conflict=!!old.cipher&&this.sameBookingIdentityConflict(bookingId,this.decrypt!(old.cipher),{kind:'companion',id:companionId});if(conflict&&!allowDuplicateIdentity)throw new Error('COMPANION_IDENTITY_CONFLICT');this.db.prepare('UPDATE additional_guests SET deleted_at=NULL WHERE id=?').run(companionId);this.audit('restore','companion',companionId);if(conflict)this.audit('companion-identity-confirmed','companion',companionId)})()
  }
  replaceIdentity(input:ReplaceIdentityInput):number{
   const d=replaceIdentitySchema.parse(input);return this.db.transaction(()=>{
    const b=this.activeBooking(d.bookingId);const record=d.kind==='primary'?this.db.prepare('SELECT id_passport_ciphertext AS cipher FROM guests WHERE id=?').get(b.guestId):this.db.prepare('SELECT id_passport_ciphertext AS cipher FROM additional_guests WHERE id=? AND booking_id=? AND deleted_at IS NULL').get(d.companionId,d.bookingId)
    if(!record)throw new Error('Identity unavailable');const before=(record as {cipher:Buffer|null}).cipher;let after:Buffer|null=null
-   const duplicateIdentity=d.kind==='primary'&&!!d.idNumber&&(this.findGuestsByIdentity(d.idNumber) as {id:number}[]).some(g=>g.id!==b.guestId)
-   if(duplicateIdentity&&d.kind==='primary'&&!d.allowDuplicateIdentity)throw new Error('DUPLICATE_IDENTITY')
+   const duplicateIdentity=!!d.idNumber&&((d.kind==='primary'&&(this.findGuestsByIdentity(d.idNumber) as {id:number}[]).some(g=>g.id!==b.guestId))||this.sameBookingIdentityConflict(d.bookingId,d.idNumber,d.kind==='primary'?{kind:'primary'}:{kind:'companion',id:d.companionId}))
+   if(duplicateIdentity&&!d.allowDuplicateIdentity)throw new Error(d.kind==='primary'?'DUPLICATE_IDENTITY':'COMPANION_IDENTITY_CONFLICT')
    if(d.idNumber){if(!this.encrypt)throw new Error('Identity encryption unavailable');after=this.encrypt(d.idNumber)}
    if(d.kind==='primary')this.db.prepare('UPDATE guests SET id_passport_ciphertext=?,id_passport_lookup=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(after,new IdentityLookup(this.db,this.encrypt,this.decrypt).forWrite(d.idNumber),b.guestId)
    else this.db.prepare('UPDATE additional_guests SET id_passport_ciphertext=?,id_passport_lookup=NULL WHERE id=? AND booking_id=?').run(after,d.companionId,d.bookingId)
@@ -240,7 +252,7 @@ export class CampRepository {
    const value=d.before?Buffer.from(d.before,'base64'):null
    let original=''
    if(value){if(!this.decrypt)throw new Error('Identity decryption unavailable');original=this.decrypt(value)}
-   const conflict=d.kind==='primary'&&!!original&&(this.findGuestsByIdentity(original) as {id:number}[]).some(g=>g.id!==d.entityId)
+   const conflict=!!original&&((d.kind==='primary'&&(this.findGuestsByIdentity(original) as {id:number}[]).some(g=>g.id!==d.entityId))||this.sameBookingIdentityConflict(d.bookingId,original,d.kind==='primary'?{kind:'primary'}:{kind:'companion',id:d.entityId}))
    if(conflict&&!allowDuplicateIdentity)throw new Error('UNDO_DUPLICATE_IDENTITY')
    if(d.kind==='primary')this.db.prepare('UPDATE guests SET id_passport_ciphertext=?,id_passport_lookup=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(value,new IdentityLookup(this.db,this.encrypt,this.decrypt).forWrite(original),d.entityId)
    else this.db.prepare('UPDATE additional_guests SET id_passport_ciphertext=?,id_passport_lookup=NULL WHERE id=? AND booking_id=?').run(value,d.entityId,d.bookingId)

@@ -74,3 +74,5 @@ html[data-theme="dark"] .declaration-editor blockquote{background:#303830;border
 .booking-date-confirmation{font-size:11px;font-weight:400;line-height:1.45;color:#687369}.booking-date-confirmation b{font-weight:600}.booking-form .form-actions{flex-wrap:wrap}html[data-theme='dark'] .booking-date-confirmation{color:#b8c2b9}
 
 .identity-lookup{margin-top:16px;padding-top:16px;border-top:1px solid #dfe3de}.identity-lookup .search-results{margin-top:10px}html[data-theme='dark'] .identity-lookup{border-color:#465047}
+
+.companion-confirm{grid-column:1/-1}

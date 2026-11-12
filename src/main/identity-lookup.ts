@@ -3,7 +3,7 @@ import type Database from 'better-sqlite3'
 import {z} from 'zod'
 
 export const IDENTITY_KEY_SETTING='security:identity-lookup-key-v1'
-const normalize=(value:string)=>value.trim().replace(/[٠-٩۰-۹]/g,c=>String(c.charCodeAt(0)-(c.charCodeAt(0)>=0x06f0?0x06f0:0x0660))).toUpperCase()
+export const normalizeIdentity=(value:string)=>value.trim().replace(/[٠-٩۰-۹]/g,c=>String(c.charCodeAt(0)-(c.charCodeAt(0)>=0x06f0?0x06f0:0x0660))).toUpperCase()
 export class IdentityLookup {
  constructor(private db:Database.Database,private encrypt?: (value:string)=>Buffer,private decrypt?: (value:Buffer)=>string){}
  private existingKey():Buffer|null{
@@ -14,7 +14,7 @@ export class IdentityLookup {
   const secret=this.decrypt(Buffer.from(encoded,'base64'));if(!/^[0-9a-f]{64}$/.test(secret))throw new Error('Identity lookup key invalid')
   return Buffer.from(secret,'hex')
  }
- private digest(value:string,key:Buffer):string{return createHmac('sha256',key).update('eva-identity-v1\0').update(normalize(value),'utf8').digest('hex')}
+ private digest(value:string,key:Buffer):string{return createHmac('sha256',key).update('eva-identity-v1\0').update(normalizeIdentity(value),'utf8').digest('hex')}
  forWrite(value:string):string|null{const key=this.existingKey();if(!key)return null;try{return value?this.digest(value,key):null}finally{key.fill(0)}}
  private initialize():Buffer{
   const existing=this.existingKey();if(existing)return existing
