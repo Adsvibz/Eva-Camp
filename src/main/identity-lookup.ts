@@ -1,7 +1,7 @@
 import {createHmac,randomBytes} from 'node:crypto'
 import type Database from 'better-sqlite3'
 import {z} from 'zod'
-import {companionHistoryPageSchema,type CompanionStay,type CompanionHistoryInput,type CompanionHistoryPage} from '../shared/contracts'
+import {primaryHistoryPageSchema,companionHistoryPageSchema,type PrimaryStay,type PrimaryHistoryInput,type PrimaryHistoryPage,type CompanionStay,type CompanionHistoryInput,type CompanionHistoryPage} from '../shared/contracts'
 
 export const IDENTITY_KEY_SETTING='security:identity-lookup-key-v1'
 export const COMPANION_INDEX_SETTING='security:companion-identity-index-v1'
@@ -59,6 +59,14 @@ export class IdentityLookup {
   }finally{key.fill(0)}
  }
 
+ findPrimaryHistoryPage(input:PrimaryHistoryInput):PrimaryHistoryPage{
+  const {identity,cursor}=primaryHistoryPageSchema.parse(input),key=this.initialize()
+  try{
+   const rows=this.db.prepare(`SELECT b.id AS bookingId,g.id AS guestId,g.full_name AS fullName,b.booking_reference AS reference,u.name AS unitName,b.arrival_date AS arrival,b.departure_date AS departure,b.status FROM guests g JOIN bookings b ON b.guest_id=g.id JOIN units u ON u.id=b.unit_id WHERE g.deleted_at IS NULL AND b.deleted_at IS NULL AND g.id_passport_ciphertext IS NOT NULL AND g.id_passport_lookup=@lookup AND (@arrival IS NULL OR b.arrival_date<@arrival OR (b.arrival_date=@arrival AND b.id<@bookingId)) ORDER BY b.arrival_date DESC,b.id DESC LIMIT 21`).all({lookup:this.digest(identity,key),arrival:cursor?.arrival??null,bookingId:cursor?.bookingId??null}) as PrimaryStay[]
+   const page=rows.slice(0,20),last=page.at(-1)
+   return {rows:page,nextCursor:rows.length>20&&last?{arrival:last.arrival,bookingId:last.bookingId}:null}
+  }finally{key.fill(0)}
+ }
  find(value:string){
   const parsed=z.string().trim().max(100).parse(value);if(!parsed)return []
   const key=this.initialize();try{return this.db.prepare(`SELECT id,full_name AS fullName,COALESCE(mobile_whatsapp,'') AS phone,nationality,email,date_of_birth AS dateOfBirth,country,home_address AS address,notes,(id_passport_ciphertext IS NOT NULL) AS hasPrimaryId FROM guests WHERE deleted_at IS NULL AND id_passport_lookup=? ORDER BY id LIMIT 20`).all(this.digest(parsed,key))}finally{key.fill(0)}

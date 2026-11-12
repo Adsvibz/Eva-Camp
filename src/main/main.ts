@@ -1,3 +1,4 @@
+import {primaryHistoryPageSchema} from '../shared/contracts'
 import {companionHistoryPageSchema} from '../shared/contracts'
 import {undoIdentityConfirmationSchema} from '../shared/contracts'
 import {unitAvailabilitySchema} from '../shared/contracts'
@@ -144,6 +145,7 @@ app.whenReady().then(()=>{
   handle('preferences:save',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');repository.savePreferences(uiPreferencesSchema.parse(raw))})
   handle('guests:find',(_event,query:unknown)=>repository.findGuests(searchSchema.parse(query)))
   handle('guests:find-identity',(_event,query:unknown)=>repository.findGuestsByIdentity(searchSchema.parse(query)))
+  handle('guests:find-history-page',(_event,input:unknown)=>repository.findPrimaryHistoryPage(primaryHistoryPageSchema.parse(input)))
   handle('companions:find-history',(_event,query:unknown)=>repository.findCompanionHistoryByIdentity(searchSchema.parse(query)))
   handle('companions:find-history-page',(_event,input:unknown)=>repository.findCompanionHistoryPage(companionHistoryPageSchema.parse(input)))
   handle('guests:duplicates',(_event,phone:unknown)=>repository.duplicateGuests(searchSchema.parse(phone)))

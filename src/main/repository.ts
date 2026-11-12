@@ -1,3 +1,4 @@
+import type {PrimaryHistoryInput} from '../shared/contracts'
 import type {CompanionHistoryInput} from '../shared/contracts'
 import {IdentityLookup,normalizeIdentity} from './identity-lookup'
 import {unitAvailabilitySchema,type UnitAvailabilityInput,type UnitAvailability} from '../shared/contracts'
@@ -30,6 +31,7 @@ export class CampRepository {
  dashboard(day:string){return dashboardSummary(this.db,day)}
  findGuests(query:string){return new GuestDirectory(this.db).find(query)}
  findGuestsByIdentity(query:string){return new IdentityLookup(this.db,this.encrypt,this.decrypt).find(query)}
+ findPrimaryHistoryPage(input:PrimaryHistoryInput){return new IdentityLookup(this.db,this.encrypt,this.decrypt).findPrimaryHistoryPage(input)}
  findCompanionHistoryByIdentity(query:string){return new IdentityLookup(this.db,this.encrypt,this.decrypt).findCompanionHistory(query)}
  findCompanionHistoryPage(input:CompanionHistoryInput){return new IdentityLookup(this.db,this.encrypt,this.decrypt).findCompanionHistoryPage(input)}
  duplicateGuests(phone:string){return new GuestDirectory(this.db).matchPhone(phone)}

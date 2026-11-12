@@ -75,3 +75,10 @@ export const companionHistoryPageSchema=z.object({identity:z.string().trim().min
 export type CompanionHistoryCursor=z.infer<typeof companionHistoryCursorSchema>
 export type CompanionHistoryInput=z.infer<typeof companionHistoryPageSchema>
 export type CompanionHistoryPage={rows:CompanionStay[];nextCursor:CompanionHistoryCursor|null}
+
+export const primaryHistoryCursorSchema=z.object({arrival:date,bookingId:z.number().int().positive().safe()}).strict()
+export const primaryHistoryPageSchema=z.object({identity:z.string().trim().min(1).max(100),cursor:primaryHistoryCursorSchema.optional()}).strict()
+export type PrimaryHistoryCursor=z.infer<typeof primaryHistoryCursorSchema>
+export type PrimaryHistoryInput=z.infer<typeof primaryHistoryPageSchema>
+export type PrimaryStay={bookingId:number;guestId:number;fullName:string;reference:string;unitName:string;arrival:string;departure:string;status:string}
+export type PrimaryHistoryPage={rows:PrimaryStay[];nextCursor:PrimaryHistoryCursor|null}
