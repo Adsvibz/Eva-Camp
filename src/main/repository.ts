@@ -106,9 +106,12 @@ export class CampRepository {
   }else{
    const shared=this.duplicateGuests(d.phone).length>0
    if(shared&&!d.allowSharedPhone)throw new Error('DUPLICATE_GUEST')
+   const duplicateIdentity=!!d.idNumber&&this.findGuestsByIdentity(d.idNumber).length>0
+   if(duplicateIdentity&&!d.allowDuplicateIdentity)throw new Error('DUPLICATE_IDENTITY')
    guestId=Number(this.db.prepare('INSERT INTO guests(full_name,mobile_whatsapp,normalized_phone,nationality,email,date_of_birth,country,home_address,notes,id_passport_ciphertext) VALUES (?,?,?,?,?,?,?,?,?,?)').run(d.fullName,d.phone,normalizePhone(d.phone),d.nationality||null,d.email||null,d.dateOfBirth||null,d.country||null,d.address||null,d.notes||null,protect(d.idNumber)).lastInsertRowid)
    if(d.idNumber)this.db.prepare('UPDATE guests SET id_passport_lookup=? WHERE id=?').run(new IdentityLookup(this.db,this.encrypt,this.decrypt).forWrite(d.idNumber),guestId)
    this.audit(shared?'create-shared-phone':'create','guest',guestId)
+   if(duplicateIdentity)this.audit('create-duplicate-identity','guest',guestId)
   }
   const year=Number(d.arrival.slice(0,4)); const reference=`EVA-${year}-${String(this.sequence('booking',year)).padStart(4,'0')}`
   const id=Number(this.db.prepare("INSERT INTO bookings(booking_reference,guest_id,unit_id,arrival_date,departure_date,adults_count,children_count,total_piasters,status,source) VALUES (?,?,?,?,?,?,?,?,'reserved',?)").run(reference,guestId,d.unitId,d.arrival,d.departure,d.adults,d.children,d.totalPiasters,d.source).lastInsertRowid)

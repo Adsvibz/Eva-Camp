@@ -95,6 +95,15 @@ async function booking(arrival,departure){
  await page.locator('.overlay').waitFor({state:'hidden'})
  let rows=await page.evaluate(()=>window.eva.listBookings());assert.equal(rows.length,1)
  const first=await page.evaluate(id=>window.eva.getBooking(id),rows[0].id)
+ // Duplicate ID detection allows selecting the existing guest or explicitly confirming another person.
+ await page.getByRole('button',{name:'New booking',exact:true}).click()
+ await fill('idNumber','e2e-primary');await page.locator('input[name="idNumber"]').blur()
+ await page.getByText('This ID or passport number already belongs to a saved guest. Select that guest or confirm this is a different person.',{exact:true}).waitFor()
+ await page.getByLabel('This is a different person with the same ID or passport number.',{exact:true}).check()
+ assert.equal(await page.getByLabel('This is a different person with the same ID or passport number.',{exact:true}).isChecked(),true)
+ await fill('idNumber','DIFFERENT-ID')
+ assert.equal(await page.getByLabel('This is a different person with the same ID or passport number.',{exact:true}).count(),0)
+ await closeModal();await page.locator('.overlay').waitFor({state:'hidden'})
  // An overlapping unit is explained and cannot be saved; another suitable unit remains selectable.
  await page.getByRole('button',{name:'New booking',exact:true}).click()
  await page.getByLabel('Find by ID / passport',{exact:true}).fill('e2e-primary')

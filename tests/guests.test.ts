@@ -22,7 +22,7 @@ describe('returning guests',()=>{
   expect(repo.guestHistory({guestId,offset:0}).rows).toHaveLength(2)
  })
  it('allows an explicitly acknowledged shared phone without merging different guests',()=>{
-  repo.createBooking(input());repo.createBooking({...input(),fullName:'Family member',allowSharedPhone:true,arrival:'2026-11-03',departure:'2026-11-04'})
+  repo.createBooking(input());repo.createBooking({...input(),fullName:'Family member',idNumber:'FAMILY-ID',allowSharedPhone:true,arrival:'2026-11-03',departure:'2026-11-04'})
   expect(db.prepare('SELECT count(*) AS n FROM guests').get()).toEqual({n:2})
   expect(repo.findGuests('٠١٢٢٠٧٥٥٧٥٥')).toHaveLength(2)
  })
@@ -60,11 +60,11 @@ describe('returning guests',()=>{
   repo.createBooking(input());const audits=repo.countAudit()
   expect(()=>repo.createBooking({...input(),arrival:'2026-11-03',departure:'2026-11-04'})).toThrow('DUPLICATE_GUEST')
   expect(repo.countAudit()).toBe(audits)
-  const next=repo.createBooking({...input(),phone:'',arrival:'2026-11-03',departure:'2026-11-04'})
+  const next=repo.createBooking({...input(),phone:'',idNumber:'NEXT-ID',arrival:'2026-11-03',departure:'2026-11-04'})
   expect(next.reference).toBe('EVA-2026-0002')
  })
  it('keeps shared-phone approval in the audit trail without storing phone or identity values there',()=>{
-  repo.createBooking(input());repo.createBooking({...input(),allowSharedPhone:true,arrival:'2026-11-03',departure:'2026-11-04'})
+  repo.createBooking(input());repo.createBooking({...input(),idNumber:'OTHER-ID',allowSharedPhone:true,arrival:'2026-11-03',departure:'2026-11-04'})
   const audit=db.prepare("SELECT * FROM audit_log WHERE action='create-shared-phone'").all()
   expect(audit).toHaveLength(1);expect(JSON.stringify(audit)).not.toContain('01220755755');expect(JSON.stringify(audit)).not.toContain('SECRET-ID')
  })
@@ -86,11 +86,28 @@ describe('returning guests',()=>{
  })
 
  it('does not leave a partial index or key when an existing identity cannot be decrypted',()=>{
-  repo.createBooking(input());db.prepare('INSERT INTO guests(full_name,id_passport_ciphertext) VALUES (?,?)').run('Broken',Buffer.from('bad'))
+  db.prepare('INSERT INTO guests(full_name,id_passport_ciphertext) VALUES (?,?)').run('Existing',Buffer.from('cipher:EXISTING'));db.prepare('INSERT INTO guests(full_name,id_passport_ciphertext) VALUES (?,?)').run('Broken',Buffer.from('bad'))
   const failing=new CampRepository(db,v=>Buffer.from('cipher:'+v),v=>{if(v.toString()==='bad')throw new Error('bad ciphertext');return v.toString().replace(/^cipher:/,'')})
   expect(()=>failing.findGuestsByIdentity('anything')).toThrow('bad ciphertext')
   expect(db.prepare("SELECT key FROM settings WHERE key='security:identity-lookup-key-v1'").get()).toBeUndefined()
   expect(db.prepare('SELECT COUNT(*) AS n FROM guests WHERE id_passport_lookup IS NOT NULL').get()).toEqual({n:0})
+ })
+
+ it('blocks a duplicate primary identity at save even before the lookup has been initialized',()=>{
+  const first=repo.createBooking(input());const audits=repo.countAudit()
+  expect(()=>repo.createBooking({...input(),fullName:'Other',phone:'',idNumber:' secret-id ',arrival:'2026-11-03',departure:'2026-11-04'})).toThrow('DUPLICATE_IDENTITY')
+  expect(repo.countAudit()).toBe(audits);expect(db.prepare('SELECT count(*) AS n FROM guests').get()).toEqual({n:1})
+  const guestId=repo.getBooking(first.id)!.guestId
+  expect(()=>repo.createBooking({...input(),guestId,phone:'',arrival:'2026-11-03',departure:'2026-11-04'})).not.toThrow()
+ })
+ it('allows an explicitly confirmed matching ID for a different guest and audits without exposing it',()=>{
+  repo.createBooking(input());repo.createBooking({...input(),fullName:'Other',phone:'',allowDuplicateIdentity:true,arrival:'2026-11-03',departure:'2026-11-04'})
+  expect(repo.findGuestsByIdentity('SECRET-ID')).toHaveLength(2)
+  const audit=db.prepare("SELECT * FROM audit_log WHERE action='create-duplicate-identity'").all();expect(audit).toHaveLength(1);expect(JSON.stringify(audit)).not.toContain('SECRET-ID')
+ })
+ it('does not block a new identity matching a deleted guest',()=>{
+  repo.createBooking(input());db.prepare('UPDATE guests SET deleted_at=CURRENT_TIMESTAMP').run()
+  expect(()=>repo.createBooking({...input(),phone:'',arrival:'2026-11-03',departure:'2026-11-04'})).not.toThrow()
  })
 
 })
