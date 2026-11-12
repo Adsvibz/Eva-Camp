@@ -123,4 +123,19 @@ describe('returning guests',()=>{
   repo.undoIdentity(confirmed);expect(repo.registrationData(other.id).idNumber).toBe('OTHER')
  })
 
+ it('requires explicit confirmation before undo restores an identity now held by another guest',()=>{
+  const first=repo.createBooking(input())
+  const change=repo.replaceIdentity({bookingId:first.id,kind:'primary',idNumber:'NEW-ID'})
+  repo.createBooking({...input(),fullName:'Other',phone:'',idNumber:'SECRET-ID',arrival:'2026-11-03',departure:'2026-11-04'})
+  const before=repo.countAudit()
+  expect(()=>repo.undoIdentity(change,'yes' as unknown as boolean)).toThrow('Invalid confirmation')
+  expect(()=>repo.undoIdentity(change)).toThrow('UNDO_DUPLICATE_IDENTITY')
+  expect(repo.countAudit()).toBe(before);expect(repo.registrationData(first.id).idNumber).toBe('NEW-ID')
+  repo.undoIdentity(change,true);expect(repo.registrationData(first.id).idNumber).toBe('SECRET-ID')
+  expect(repo.findGuestsByIdentity('SECRET-ID')).toHaveLength(2)
+  const audit=db.prepare("SELECT * FROM audit_log WHERE action='identity-undo-confirmed'").all()
+  expect(audit).toHaveLength(1);expect(JSON.stringify(audit)).not.toContain('SECRET-ID')
+  expect(()=>repo.undoIdentity(change,true)).toThrow()
+ })
+
 })

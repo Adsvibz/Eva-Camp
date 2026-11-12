@@ -1,3 +1,4 @@
+import {undoIdentityConfirmationSchema} from '../shared/contracts'
 import {unitAvailabilitySchema} from '../shared/contracts'
 import {saveDeclarationSchema,undoDeclarationSchema,archivePageSchema} from '../shared/declaration'
 import { app, BrowserWindow, ipcMain, dialog, safeStorage, Menu, protocol } from 'electron'
@@ -122,7 +123,7 @@ app.whenReady().then(()=>{
   handle('units:update',(_event,data:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');repository.updateUnit(updateUnitSchema.parse(data))})
   handle('units:create',(_event,data:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');return repository.createUnit(unitSchema.parse(data))})
   handle('identity:replace',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');return repository.replaceIdentity(replaceIdentitySchema.parse(raw))})
-  handle('identity:undo',(_event,id:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');repository.undoIdentity(statusSchema.shape.bookingId.parse(id))})
+  handle('identity:undo',(_event,id:unknown,confirm:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');repository.undoIdentity(statusSchema.shape.bookingId.parse(id),undoIdentityConfirmationSchema.parse(confirm))})
   handle('bookings:discount',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');repository.setDiscount(discountSchema.parse(raw))})
   handle('declaration:archives',(_event,raw:unknown)=>{const d=archivePageSchema.parse(raw);return repository.listDeclarationArchives(d.bookingId,d.offset)})
   handle('declaration:preview-archive',async (_event,id:unknown)=>{const archiveId=statusSchema.shape.bookingId.parse(id);await showPreview(repository.declarationArchiveHtml(archiveId),'Eva_Camp_Archived_Registration.pdf')})

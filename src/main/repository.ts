@@ -227,7 +227,8 @@ export class CampRepository {
    return Number(this.db.prepare('INSERT INTO audit_log(actor,action,entity_type,entity_id,detail_json) VALUES (?,?,?,?,?)').run('operator','identity-change',d.kind,String(detail.entityId),JSON.stringify(detail)).lastInsertRowid)
   })()
  }
- undoIdentity(auditId:number):void{
+ undoIdentity(auditId:number,allowDuplicateIdentity=false):void{
+  if(typeof allowDuplicateIdentity!=='boolean')throw new Error('Invalid confirmation')
   if(!Number.isSafeInteger(auditId)||auditId<=0)throw new Error('Invalid audit entry')
   this.db.transaction(()=>{
    const audit=this.db.prepare("SELECT detail_json AS detail FROM audit_log WHERE id=? AND action='identity-change'").get(auditId) as {detail:string}|undefined
@@ -237,10 +238,14 @@ export class CampRepository {
    const current=d.kind==='primary'&&b.guestId===d.entityId?this.db.prepare('SELECT id_passport_ciphertext AS cipher FROM guests WHERE id=?').get(d.entityId):d.kind==='companion'?this.db.prepare('SELECT id_passport_ciphertext AS cipher FROM additional_guests WHERE id=? AND booking_id=? AND deleted_at IS NULL').get(d.entityId,d.bookingId):undefined
    if(!current||((current as {cipher:Buffer|null}).cipher?.toString('base64')??null)!==d.after)throw new Error('Identity has since changed')
    const value=d.before?Buffer.from(d.before,'base64'):null
-   if(value){if(!this.decrypt)throw new Error('Identity decryption unavailable');this.decrypt(value)}
-   if(d.kind==='primary')this.db.prepare('UPDATE guests SET id_passport_ciphertext=?,id_passport_lookup=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(value,new IdentityLookup(this.db,this.encrypt,this.decrypt).forWrite(value?this.decrypt!(value):''),d.entityId)
+   let original=''
+   if(value){if(!this.decrypt)throw new Error('Identity decryption unavailable');original=this.decrypt(value)}
+   const conflict=d.kind==='primary'&&!!original&&(this.findGuestsByIdentity(original) as {id:number}[]).some(g=>g.id!==d.entityId)
+   if(conflict&&!allowDuplicateIdentity)throw new Error('UNDO_DUPLICATE_IDENTITY')
+   if(d.kind==='primary')this.db.prepare('UPDATE guests SET id_passport_ciphertext=?,id_passport_lookup=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(value,new IdentityLookup(this.db,this.encrypt,this.decrypt).forWrite(original),d.entityId)
    else this.db.prepare('UPDATE additional_guests SET id_passport_ciphertext=?,id_passport_lookup=NULL WHERE id=? AND booking_id=?').run(value,d.entityId,d.bookingId)
    this.audit('identity-undo','identity-change',auditId)
+   if(conflict)this.audit('identity-undo-confirmed','identity-change',auditId)
   })()
  }
  updateBookingDetails(input:BookingDetailsInput):void{

@@ -30,6 +30,7 @@ export const reportRangeSchema=z.object({start:date,end:date}).refine(v=>v.start
 export type ManagementReport={start:string;end:string;bookingCount:number;bookingValuePiasters:number;collectionsPiasters:number;refundsPiasters:number;scheduledNights:number;availableNights:number;outstandingPiasters:number;nationalities:{nationality:string;stays:number}[]}
 const identifier=z.string().trim().max(100)
 export const replaceIdentitySchema=z.discriminatedUnion('kind',[z.object({kind:z.literal('primary'),bookingId:z.number().int().positive(),idNumber:identifier,allowDuplicateIdentity:z.boolean().optional()}),z.object({kind:z.literal('companion'),bookingId:z.number().int().positive(),companionId:z.number().int().positive(),idNumber:identifier})])
+export const undoIdentityConfirmationSchema=z.boolean()
 export const addCompanionSchema=z.object({bookingId:z.number().int().positive(),fullName:z.string().trim().min(1).max(200),idNumber:identifier.optional()})
 export const updateCompanionSchema=z.object({bookingId:z.number().int().positive(),companionId:z.number().int().positive(),fullName:z.string().trim().min(1).max(200)})
 export const companionRefSchema=z.object({bookingId:z.number().int().positive(),companionId:z.number().int().positive()})
