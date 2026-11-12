@@ -1,3 +1,4 @@
+import {unitAvailabilitySchema,type UnitAvailabilityInput,type UnitAvailability} from '../shared/contracts'
 import {paymentHistorySchema,type PaymentHistoryInput,type PaymentHistoryPage,type PaymentRow} from '../shared/contracts'
 import {DeclarationArchives,type ArchiveFactory} from './declaration-archives'
 import {DeclarationStore} from './declarations'
@@ -69,6 +70,17 @@ export class CampRepository {
  }
  createUnit(data:UnitInput):number { const d=unitSchema.parse(data); return this.db.transaction(()=>{ const id=Number(this.db.prepare('INSERT INTO units(name,type,capacity,base_price_piasters) VALUES (?,?,?,?)').run(d.name,d.type,d.capacity,d.pricePiasters).lastInsertRowid); this.audit('create','unit',id); return id })() }
  listUnits():UnitRow[] { return this.db.prepare("SELECT id,name,type,capacity,base_price_piasters AS pricePiasters,housekeeping_status AS housekeepingStatus,COALESCE(notes,'') AS notes FROM units WHERE deleted_at IS NULL ORDER BY name COLLATE NOCASE").all() as UnitRow[] }
+ unitAvailability(input:UnitAvailabilityInput):UnitAvailability[]{
+  const d=unitAvailabilitySchema.parse(input)
+  return this.db.prepare(`SELECT u.id AS unitId,CASE
+   WHEN u.housekeeping_status IN ('cleaning','maintenance') THEN u.housekeeping_status
+   WHEN u.capacity < @adults + @children THEN 'capacity'
+   WHEN EXISTS (SELECT 1 FROM booking_unit_segments s JOIN bookings b ON b.id=s.booking_id
+    WHERE s.unit_id=u.id AND b.deleted_at IS NULL AND b.status IN ('reserved','checked-in')
+    AND s.start_date < @departure AND s.end_date > @arrival) THEN 'booked'
+   ELSE 'available' END AS state
+   FROM units u WHERE u.deleted_at IS NULL ORDER BY u.name COLLATE NOCASE`).all(d) as UnitAvailability[]
+ }
  updateUnit(input:UpdateUnitInput):void{const d=updateUnitSchema.parse(input);this.db.transaction(()=>{
   const existing=this.db.prepare("SELECT name,type,capacity,base_price_piasters AS pricePiasters,housekeeping_status AS housekeepingStatus,COALESCE(notes,'') AS notes FROM units WHERE id=? AND deleted_at IS NULL").get(d.id) as {name:string;type:string;capacity:number;pricePiasters:number;housekeepingStatus:string;notes:string}|undefined;if(!existing)throw new Error('UNIT_UNAVAILABLE')
   const day=this.today();date.parse(day)

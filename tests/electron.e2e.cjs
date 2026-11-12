@@ -44,7 +44,7 @@ async function preview(action,filename,text,minimumPages=1){
 async function booking(arrival,departure){
  await page.getByRole('button',{name:'New booking',exact:true}).click()
  await page.locator('select[name="unit"]').selectOption({label:'A'})
- await fill('arrival',arrival);await fill('departure',departure);await fill('total','١٠٠٠')
+ await fill('arrival',arrival);await fill('departure',departure);await fill('total','١٠٠٠');await page.locator('.dialog > form > .form-actions .primary').waitFor({state:'visible'});await page.waitForFunction(()=>!document.querySelector('.dialog > form > .form-actions .primary')?.disabled)
 }
 ;(async()=>{
  app=await electron.launch({args:[path.join(root,'electron-test-bootstrap.cjs')],env:{...process.env,EVA_TEST_DATA_DIR:data},timeout:30000})
@@ -95,6 +95,18 @@ async function booking(arrival,departure){
  await page.locator('.overlay').waitFor({state:'hidden'})
  let rows=await page.evaluate(()=>window.eva.listBookings());assert.equal(rows.length,1)
  const first=await page.evaluate(id=>window.eva.getBooking(id),rows[0].id)
+ // An overlapping unit is explained and cannot be saved; another suitable unit remains selectable.
+ await page.getByRole('button',{name:'New booking',exact:true}).click()
+ await page.locator('select[name="unit"]').selectOption({label:'A'})
+ await fill('arrival','2026-11-11');await fill('departure','2026-11-12')
+ await page.getByText('The selected unit is unavailable for these dates or guest count. Choose another unit.').waitFor()
+ assert.equal(await page.locator('select[name="unit"] option').filter({hasText:'A · Booked for these dates'}).isDisabled(),true)
+ assert.equal(await page.locator('.dialog > form > .form-actions .primary').isDisabled(),true)
+ await page.locator('select[name="unit"]').selectOption({label:'B'})
+ await page.waitForFunction(()=>!document.querySelector('.dialog > form > .form-actions .primary')?.disabled)
+ await page.screenshot({path:path.join(artifacts,'booking-availability.png'),fullPage:true})
+ await closeModal()
+
  await page.getByRole('button',{name,exact:true}).click()
  await page.getByRole('button',{name:'Check in',exact:true}).click()
  await page.getByRole('button',{name:'Check out',exact:true}).waitFor()

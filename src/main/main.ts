@@ -1,3 +1,4 @@
+import {unitAvailabilitySchema} from '../shared/contracts'
 import {saveDeclarationSchema,undoDeclarationSchema,archivePageSchema} from '../shared/declaration'
 import { app, BrowserWindow, ipcMain, dialog, safeStorage, Menu, protocol } from 'electron'
 import { join } from 'node:path'
@@ -117,6 +118,7 @@ app.whenReady().then(()=>{
   handle('closing:preview',async (_event,day:unknown)=>{const report=repository.dailyReport(date.parse(day));await showPreview(closingHtml(report,fonts),'Eva_Camp_Closing.pdf')})
   handle('backup:manual',async ()=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');const date=new Date().toISOString().replace(/[:.]/g,'-');const choice=await dialog.showSaveDialog({title:'Save backup / حفظ نسخة احتياطية',defaultPath:`Eva_Camp_Backup_${date}.sqlite`,filters:[{name:'SQLite',extensions:['sqlite']}]});if(choice.canceled||!choice.filePath)return false;await track(createManualBackup(db,choice.filePath));return true})
   handle('units:list',()=>repository.listUnits())
+  handle('units:availability',(_event,data:unknown)=>repository.unitAvailability(unitAvailabilitySchema.parse(data)))
   handle('units:update',(_event,data:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');repository.updateUnit(updateUnitSchema.parse(data))})
   handle('units:create',(_event,data:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');return repository.createUnit(unitSchema.parse(data))})
   handle('identity:replace',(_event,raw:unknown)=>{if(restoring||shutdownStarted)throw new Error('Restore or shutdown in progress');return repository.replaceIdentity(replaceIdentitySchema.parse(raw))})
