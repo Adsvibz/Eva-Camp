@@ -23,7 +23,7 @@ async function preview(action,filename,text,minimumPages=1){
  await window.waitForURL('evaprint://preview/**')
  await window.waitForLoadState('domcontentloaded')
  await window.evaluate(()=>document.fonts.ready)
- if(filename.startsWith('invoice')){const widths=await window.evaluate(()=>({page:document.documentElement.scrollWidth,viewport:document.documentElement.clientWidth}));assert.ok(widths.page<=widths.viewport,`Invoice preview overflows horizontally: ${JSON.stringify(widths)}`)}
+ if(filename.startsWith('invoice')||filename.startsWith('receipt')){const widths=await window.evaluate(()=>({page:document.documentElement.scrollWidth,viewport:document.documentElement.clientWidth}));assert.ok(widths.page<=widths.viewport,`Print preview overflows horizontally: ${JSON.stringify(widths)}`)}
  assert.ok((await window.locator('body').innerText()).includes(text))
  if(filename==='registration-signed'||filename==='registration-archived')assert.equal(await window.locator('svg.guest-signature').count(),1)
  if(filename==='registration-stale'||filename==='registration-blank')assert.equal(await window.locator('svg.guest-signature').count(),0)
