@@ -12,6 +12,7 @@ async function preferences(){await page.locator('nav').getByRole('button',{name:
  const blocked=await page.evaluate(async()=>{try{await window.eva.listUnits();return false}catch(e){return String(e).includes('APP_LOCKED')}});assert.equal(blocked,true)
  const discountBlocked=await page.evaluate(async()=>{try{await window.eva.setDiscount({bookingId:1,discountPiasters:100,expectedDiscountPiasters:0});return false}catch(e){return String(e).includes('APP_LOCKED')}});assert.equal(discountBlocked,true)
  const declarationBlocked=await page.evaluate(async()=>{try{await window.eva.getDeclaration(1);return false}catch(e){return String(e).includes('APP_LOCKED')}});assert.equal(declarationBlocked,true)
+ const companionHistoryBlocked=await page.evaluate(async()=>{try{await window.eva.findCompanionHistoryByIdentity('TEST');return false}catch(e){return String(e).includes('APP_LOCKED')}});assert.equal(companionHistoryBlocked,true)
  const identityBlocked=await page.evaluate(async()=>{try{await window.eva.findGuestsByIdentity('TEST');return false}catch(e){return String(e).includes('APP_LOCKED')}});assert.equal(identityBlocked,true)
  const paymentHistoryBlocked=await page.evaluate(async()=>{try{await window.eva.listPayments({bookingId:1,offset:0});return false}catch(e){return String(e).includes('APP_LOCKED')}});assert.equal(paymentHistoryBlocked,true)
  await page.getByLabel('Current PIN',{exact:true}).fill('000000');await page.getByRole('button',{name:'Unlock',exact:true}).click();await page.getByRole('alert').filter({hasText:'Incorrect PIN'}).waitFor()

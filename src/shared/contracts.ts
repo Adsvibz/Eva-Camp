@@ -67,3 +67,5 @@ export const paymentHistorySchema=z.object({bookingId:z.number().int().positive(
 export type PaymentHistoryInput=z.infer<typeof paymentHistorySchema>
 export type PaymentRow={id:number;receiptNo:string;date:string;method:'cash'|'card'|'transfer';amountPiasters:number;note:string}
 export type PaymentHistoryPage={rows:PaymentRow[];hasMore:boolean}
+
+export type CompanionStay={bookingId:number;companionId:number;companionName:string;reference:string;primaryGuest:string;arrival:string;departure:string;status:string}

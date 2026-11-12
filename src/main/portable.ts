@@ -1,4 +1,4 @@
-import {IDENTITY_KEY_SETTING} from './identity-lookup'
+import {IDENTITY_KEY_SETTING,COMPANION_INDEX_SETTING} from './identity-lookup'
 import {assertArchiveIntegrity} from './archive-integrity'
 import Database from 'better-sqlite3'
 import {randomBytes,scryptSync,createCipheriv,createDecipheriv,createHash} from 'node:crypto'
@@ -52,7 +52,7 @@ export function createPortableArchive(live:Database.Database,password:string,dec
  try{
   snapshot.pragma('temp_store = MEMORY');snapshot.pragma('journal_mode = MEMORY');snapshot.pragma('secure_delete = ON');snapshot.pragma('foreign_keys = ON');verify(snapshot)
   if(snapshot.prepare('SELECT key FROM settings WHERE key=?').get(MARKER))throw new Error('Unexpected portable database marker')
-  snapshot.transaction(()=>{convertIdentities(snapshot,value=>Buffer.from(decrypt(value),'utf8'));snapshot.prepare('DELETE FROM settings WHERE key=?').run(IDENTITY_KEY_SETTING);snapshot.prepare('INSERT INTO settings(key,value_json) VALUES (?,?)').run(MARKER,JSON.stringify(true))})()
+  snapshot.transaction(()=>{convertIdentities(snapshot,value=>Buffer.from(decrypt(value),'utf8'));snapshot.prepare('DELETE FROM settings WHERE key IN (?,?)').run(IDENTITY_KEY_SETTING,COMPANION_INDEX_SETTING);snapshot.prepare('INSERT INTO settings(key,value_json) VALUES (?,?)').run(MARKER,JSON.stringify(true))})()
   snapshot.exec('VACUUM');plain=snapshot.serialize()
   const cipher=createCipheriv('aes-256-gcm',key,iv);const header=Buffer.concat([MAGIC,salt,iv]);cipher.setAAD(header)
   const encrypted=Buffer.concat([cipher.update(plain),cipher.final()]);return Buffer.concat([header,encrypted,cipher.getAuthTag()])

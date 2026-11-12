@@ -29,6 +29,7 @@ export class CampRepository {
  dashboard(day:string){return dashboardSummary(this.db,day)}
  findGuests(query:string){return new GuestDirectory(this.db).find(query)}
  findGuestsByIdentity(query:string){return new IdentityLookup(this.db,this.encrypt,this.decrypt).find(query)}
+ findCompanionHistoryByIdentity(query:string){return new IdentityLookup(this.db,this.encrypt,this.decrypt).findCompanionHistory(query)}
  duplicateGuests(phone:string){return new GuestDirectory(this.db).matchPhone(phone)}
  guestHistory(input:GuestHistoryInput){return new GuestDirectory(this.db).history(input)}
  getPreferences():UiPreferences{
@@ -125,7 +126,7 @@ export class CampRepository {
   for(const companion of d.companions||[]){
    const conflict=!!companion.idNumber&&this.sameBookingIdentityConflict(id,companion.idNumber,{kind:'companion'})
    if(conflict&&!companion.allowDuplicateIdentity)throw new Error('COMPANION_IDENTITY_CONFLICT')
-   const companionId=Number(this.db.prepare('INSERT INTO additional_guests(booking_id,full_name,id_passport_ciphertext) VALUES (?,?,?)').run(id,companion.fullName,protect(companion.idNumber)).lastInsertRowid)
+   const companionId=Number(this.db.prepare('INSERT INTO additional_guests(booking_id,full_name,id_passport_ciphertext,id_passport_lookup) VALUES (?,?,?,?)').run(id,companion.fullName,protect(companion.idNumber),new IdentityLookup(this.db,this.encrypt,this.decrypt).forWrite(companion.idNumber||'')).lastInsertRowid)
    if(conflict)this.audit('companion-identity-confirmed','companion',companionId)
   }
   this.audit('create','booking',id); return {id,reference}
@@ -215,7 +216,7 @@ export class CampRepository {
   return b
  }
  addCompanion(input:AddCompanionInput):number{
-  const d=addCompanionSchema.parse(input);return this.db.transaction(()=>{this.activeBooking(d.bookingId);const conflict=!!d.idNumber&&this.sameBookingIdentityConflict(d.bookingId,d.idNumber,{kind:'companion'});if(conflict&&!d.allowDuplicateIdentity)throw new Error('COMPANION_IDENTITY_CONFLICT');let cipher:Buffer|null=null;if(d.idNumber){if(!this.encrypt)throw new Error('Identity encryption unavailable');cipher=this.encrypt(d.idNumber)}const id=Number(this.db.prepare('INSERT INTO additional_guests(booking_id,full_name,id_passport_ciphertext) VALUES (?,?,?)').run(d.bookingId,d.fullName,cipher).lastInsertRowid);this.audit('create','companion',id);if(conflict)this.audit('companion-identity-confirmed','companion',id);return id})()
+  const d=addCompanionSchema.parse(input);return this.db.transaction(()=>{this.activeBooking(d.bookingId);const conflict=!!d.idNumber&&this.sameBookingIdentityConflict(d.bookingId,d.idNumber,{kind:'companion'});if(conflict&&!d.allowDuplicateIdentity)throw new Error('COMPANION_IDENTITY_CONFLICT');let cipher:Buffer|null=null;if(d.idNumber){if(!this.encrypt)throw new Error('Identity encryption unavailable');cipher=this.encrypt(d.idNumber)}const id=Number(this.db.prepare('INSERT INTO additional_guests(booking_id,full_name,id_passport_ciphertext,id_passport_lookup) VALUES (?,?,?,?)').run(d.bookingId,d.fullName,cipher,new IdentityLookup(this.db,this.encrypt,this.decrypt).forWrite(d.idNumber||'')).lastInsertRowid);this.audit('create','companion',id);if(conflict)this.audit('companion-identity-confirmed','companion',id);return id})()
  }
  updateCompanion(input:UpdateCompanionInput):void{
   const d=updateCompanionSchema.parse(input);this.db.transaction(()=>{this.activeBooking(d.bookingId);const changed=this.db.prepare('UPDATE additional_guests SET full_name=? WHERE id=? AND booking_id=? AND deleted_at IS NULL').run(d.fullName,d.companionId,d.bookingId);if(!changed.changes)throw new Error('Companion unavailable');this.audit('update','companion',d.companionId)})()
@@ -234,7 +235,7 @@ export class CampRepository {
    if(duplicateIdentity&&!d.allowDuplicateIdentity)throw new Error(d.kind==='primary'?'DUPLICATE_IDENTITY':'COMPANION_IDENTITY_CONFLICT')
    if(d.idNumber){if(!this.encrypt)throw new Error('Identity encryption unavailable');after=this.encrypt(d.idNumber)}
    if(d.kind==='primary')this.db.prepare('UPDATE guests SET id_passport_ciphertext=?,id_passport_lookup=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(after,new IdentityLookup(this.db,this.encrypt,this.decrypt).forWrite(d.idNumber),b.guestId)
-   else this.db.prepare('UPDATE additional_guests SET id_passport_ciphertext=?,id_passport_lookup=NULL WHERE id=? AND booking_id=?').run(after,d.companionId,d.bookingId)
+   else this.db.prepare('UPDATE additional_guests SET id_passport_ciphertext=?,id_passport_lookup=? WHERE id=? AND booking_id=?').run(after,new IdentityLookup(this.db,this.encrypt,this.decrypt).forWrite(d.idNumber),d.companionId,d.bookingId)
    const detail={bookingId:d.bookingId,kind:d.kind,entityId:d.kind==='primary'?b.guestId:d.companionId,before:before?.toString('base64')??null,after:after?.toString('base64')??null,...(duplicateIdentity?{duplicateIdentityConfirmed:true}:{})}
    return Number(this.db.prepare('INSERT INTO audit_log(actor,action,entity_type,entity_id,detail_json) VALUES (?,?,?,?,?)').run('operator','identity-change',d.kind,String(detail.entityId),JSON.stringify(detail)).lastInsertRowid)
   })()
@@ -255,7 +256,7 @@ export class CampRepository {
    const conflict=!!original&&((d.kind==='primary'&&(this.findGuestsByIdentity(original) as {id:number}[]).some(g=>g.id!==d.entityId))||this.sameBookingIdentityConflict(d.bookingId,original,d.kind==='primary'?{kind:'primary'}:{kind:'companion',id:d.entityId}))
    if(conflict&&!allowDuplicateIdentity)throw new Error('UNDO_DUPLICATE_IDENTITY')
    if(d.kind==='primary')this.db.prepare('UPDATE guests SET id_passport_ciphertext=?,id_passport_lookup=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(value,new IdentityLookup(this.db,this.encrypt,this.decrypt).forWrite(original),d.entityId)
-   else this.db.prepare('UPDATE additional_guests SET id_passport_ciphertext=?,id_passport_lookup=NULL WHERE id=? AND booking_id=?').run(value,d.entityId,d.bookingId)
+   else this.db.prepare('UPDATE additional_guests SET id_passport_ciphertext=?,id_passport_lookup=? WHERE id=? AND booking_id=?').run(value,new IdentityLookup(this.db,this.encrypt,this.decrypt).forWrite(original),d.entityId,d.bookingId)
    this.audit('identity-undo','identity-change',auditId)
    if(conflict)this.audit('identity-undo-confirmed','identity-change',auditId)
   })()

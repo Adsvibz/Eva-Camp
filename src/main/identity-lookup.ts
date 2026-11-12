@@ -1,8 +1,10 @@
 import {createHmac,randomBytes} from 'node:crypto'
 import type Database from 'better-sqlite3'
 import {z} from 'zod'
+import type {CompanionStay} from '../shared/contracts'
 
 export const IDENTITY_KEY_SETTING='security:identity-lookup-key-v1'
+export const COMPANION_INDEX_SETTING='security:companion-identity-index-v1'
 export const normalizeIdentity=(value:string)=>value.trim().replace(/[٠-٩۰-۹]/g,c=>String(c.charCodeAt(0)-(c.charCodeAt(0)>=0x06f0?0x06f0:0x0660))).toUpperCase()
 export class IdentityLookup {
  constructor(private db:Database.Database,private encrypt?: (value:string)=>Buffer,private decrypt?: (value:Buffer)=>string){}
@@ -26,10 +28,27 @@ export class IdentityLookup {
     const select=this.db.prepare('SELECT id,id_passport_ciphertext AS cipher FROM guests WHERE id>? AND id_passport_ciphertext IS NOT NULL ORDER BY id LIMIT 100')
     const update=this.db.prepare('UPDATE guests SET id_passport_lookup=? WHERE id=?')
     let last=0;for(;;){const rows=select.all(last) as {id:number;cipher:Buffer}[];if(!rows.length)break;for(const row of rows){update.run(this.digest(this.decrypt!(row.cipher),key),row.id);last=row.id}}
+    this.db.prepare('DELETE FROM settings WHERE key=?').run(COMPANION_INDEX_SETTING)
     this.db.prepare('INSERT INTO settings(key,value_json) VALUES (?,?)').run(IDENTITY_KEY_SETTING,JSON.stringify(protectedKey.toString('base64')))
    })()
    return key
   }catch(error){key.fill(0);throw error}
+ }
+ private ensureCompanionIndex(key:Buffer):void{
+  const marker=this.db.prepare('SELECT value_json AS value FROM settings WHERE key=?').get(COMPANION_INDEX_SETTING) as {value:string}|undefined
+  if(marker){if(marker.value!=='true')throw new Error('Companion lookup index invalid');return}
+  if(!this.decrypt)throw new Error('Identity lookup decryption unavailable')
+  this.db.transaction(()=>{
+   this.db.exec('CREATE INDEX IF NOT EXISTS companions_identity_lookup_idx ON additional_guests(id_passport_lookup) WHERE deleted_at IS NULL')
+   const select=this.db.prepare('SELECT id,id_passport_ciphertext AS cipher FROM additional_guests WHERE id>? AND id_passport_ciphertext IS NOT NULL ORDER BY id LIMIT 100')
+   const update=this.db.prepare('UPDATE additional_guests SET id_passport_lookup=? WHERE id=?')
+   let last=0;for(;;){const rows=select.all(last) as {id:number;cipher:Buffer}[];if(!rows.length)break;for(const row of rows){update.run(this.digest(this.decrypt!(row.cipher),key),row.id);last=row.id}}
+   this.db.prepare('INSERT INTO settings(key,value_json) VALUES (?,?)').run(COMPANION_INDEX_SETTING,'true')
+  })()
+ }
+ findCompanionHistory(value:string):CompanionStay[]{
+  const parsed=z.string().trim().max(100).parse(value);if(!parsed)return []
+  const key=this.initialize();try{this.ensureCompanionIndex(key);return this.db.prepare(`SELECT b.id AS bookingId,c.id AS companionId,c.full_name AS companionName,b.booking_reference AS reference,g.full_name AS primaryGuest,b.arrival_date AS arrival,b.departure_date AS departure,b.status FROM additional_guests c JOIN bookings b ON b.id=c.booking_id JOIN guests g ON g.id=b.guest_id WHERE c.deleted_at IS NULL AND b.deleted_at IS NULL AND c.id_passport_ciphertext IS NOT NULL AND c.id_passport_lookup=? ORDER BY b.arrival_date DESC,b.id DESC,c.id DESC LIMIT 20`).all(this.digest(parsed,key)) as CompanionStay[]}finally{key.fill(0)}
  }
  find(value:string){
   const parsed=z.string().trim().max(100).parse(value);if(!parsed)return []

@@ -100,6 +100,15 @@ async function booking(arrival,departure){
  await page.locator('.overlay').waitFor({state:'hidden'})
  let rows=await page.evaluate(()=>window.eva.listBookings());assert.equal(rows.length,1)
  const first=await page.evaluate(id=>window.eva.getBooking(id),rows[0].id)
+ // Exact companion identity lookup opens the matching booking without exposing its number in results.
+ await page.keyboard.press('Control+k')
+ await page.getByLabel('Companion ID / passport number',{exact:true}).fill('e2e-companion')
+ await page.getByRole('button',{name:'Search companion stays',exact:true}).click()
+ await page.getByRole('button',{name:/علي أحمد/}).waitFor()
+ await page.locator('.dialog').screenshot({path:path.join(artifacts,'companion-search.png')})
+ await page.getByRole('button',{name:/علي أحمد/}).click()
+ await page.getByRole('heading',{name:'Booking details',exact:true}).waitFor()
+ await closeModal()
  // Duplicate ID detection allows selecting the existing guest or explicitly confirming another person.
  await page.getByRole('button',{name:'New booking',exact:true}).click()
  await fill('idNumber','e2e-primary');await page.locator('input[name="idNumber"]').blur()
