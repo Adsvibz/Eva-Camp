@@ -18,9 +18,10 @@ function convertIdentities(db:Database.Database,convert:(value:Buffer)=>Buffer){
  const version=(db.prepare('SELECT MAX(version) AS version FROM schema_migrations').get() as {version:number}).version
  const declarations=version>=4?db.prepare('SELECT booking_id,is_current,revision FROM declarations').all() as {booking_id:number;is_current:number;revision:number}[]:[]
  for(const table of ['guests','additional_guests'] as const){
-  const rows=db.prepare(`SELECT id,id_passport_ciphertext AS cipher FROM ${table} WHERE id_passport_ciphertext IS NOT NULL`).all() as {id:number;cipher:Buffer}[]
+  const select=db.prepare(`SELECT id,id_passport_ciphertext AS cipher FROM ${table} WHERE id>? AND id_passport_ciphertext IS NOT NULL ORDER BY id LIMIT 100`)
   const update=db.prepare(`UPDATE ${table} SET id_passport_ciphertext=?,id_passport_lookup=NULL WHERE id=?`)
-  for(const row of rows)update.run(convert(row.cipher),row.id)
+  let last=0
+  for(;;){const rows=select.all(last) as {id:number;cipher:Buffer}[];if(!rows.length)break;for(const row of rows){update.run(convert(row.cipher),row.id);last=row.id}}
  }
  const changes=db.prepare("SELECT id,detail_json AS detail FROM audit_log WHERE action='identity-change'").all() as {id:number;detail:string}[]
  const update=db.prepare('UPDATE audit_log SET detail_json=? WHERE id=?')

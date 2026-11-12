@@ -32,3 +32,15 @@ it('exports and restores a file-backed WAL database with uncheckpointed guest da
  const dir=mkdtempSync(join(tmpdir(),'eva-portable-wal-'));const live=new Database(join(dir,'live.sqlite'));live.pragma('journal_mode = WAL');live.pragma('wal_autocheckpoint = 0')
  try{live.exec(schema);live.exec(readFileSync(join(process.cwd(),'db/migrations/0002_unit_segments.sql'),'utf8'));live.exec(readFileSync(join(process.cwd(),'db/migrations/0003_guest_lookup.sql'),'utf8'));live.exec(readFileSync(join(process.cwd(),'db/migrations/0004_declarations.sql'),'utf8'));live.exec(readFileSync(join(process.cwd(),'db/migrations/0005_declaration_archives.sql'),'utf8'));const repo=new CampRepository(live,enc('device-A:'),dec('device-A:'));const u=repo.createUnit({name:'WAL room',type:'room',capacity:2,pricePiasters:0});const b=repo.createBooking({fullName:'WAL guest',phone:'',unitId:u,arrival:'2026-11-01',departure:'2026-11-02',adults:1,children:0,totalPiasters:0,source:'phone',idNumber:'WAL-PASSPORT'});const archive=createPortableArchive(live,'Long-password-2026',dec('device-A:'));const pending=join(dir,'restored.sqlite');stagePortableRestore(archive,'Long-password-2026',pending,enc('device-B:'),dec('device-B:'));const recovered=new Database(pending);expect(new CampRepository(recovered,enc('device-B:'),dec('device-B:')).registrationData(b.id).idNumber).toBe('WAL-PASSPORT');recovered.close()}finally{live.close();rmSync(dir,{recursive:true,force:true})}
 })
+it('preserves encrypted identity records across a large portable backup and device change',()=>{
+ const db=new Database(':memory:');db.exec(schema)
+ const insert=db.prepare('INSERT INTO guests(full_name,id_passport_ciphertext) VALUES (?,?)')
+ db.transaction(()=>{for(let i=0;i<1100;i++)insert.run(`Guest ${i}`,enc('device-A:')(`ID-${i}`))})()
+ const dir=mkdtempSync(join(tmpdir(),'eva-large-portable-')),pending=join(dir,'restored.sqlite')
+ try{
+  const archive=createPortableArchive(db,'Long-password-2026',dec('device-A:'))
+  stagePortableRestore(archive,'Long-password-2026',pending,enc('device-B:'),dec('device-B:'))
+  const restored=new Database(pending,{readonly:true})
+  try{const rows=restored.prepare('SELECT id_passport_ciphertext AS cipher FROM guests ORDER BY id').all() as {cipher:Buffer}[];expect(rows).toHaveLength(1100);for(const i of [0,499,500,1099])expect(dec('device-B:')(rows[i].cipher)).toBe(`ID-${i}`)}finally{restored.close()}
+ }finally{db.close();rmSync(dir,{recursive:true,force:true})}
+})
