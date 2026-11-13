@@ -1,6 +1,6 @@
 {
   "name": "eva-camp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Offline guest and booking management for Eva Camp",
   "main": "out/main/main.cjs",
@@ -9,7 +9,7 @@
     "build": "electron-vite build",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "dist:win": "npm run build && electron-builder --win nsis portable --publish never",
+    "dist:win": "npm run build && electron-builder --win nsis --x64 --publish never",
     "test:e2e": "node tests/electron.e2e.cjs"
   },
   "dependencies": {
@@ -47,13 +47,13 @@
     ],
     "win": {
       "target": [
-        "nsis",
-        "portable"
+        "nsis"
       ]
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "evacamp.exe"
     }
   }
 }

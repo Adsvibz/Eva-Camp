@@ -1,10 +1,12 @@
+import {GitHubUpdater} from './updates'
+import {launchInstaller} from './update-install'
 import {primaryHistoryPageSchema} from '../shared/contracts'
 import {companionHistoryPageSchema} from '../shared/contracts'
 import {undoIdentityConfirmationSchema} from '../shared/contracts'
 import {unitAvailabilitySchema} from '../shared/contracts'
 import {saveDeclarationSchema,undoDeclarationSchema,archivePageSchema} from '../shared/declaration'
 import { app, BrowserWindow, ipcMain, dialog, safeStorage, Menu, protocol } from 'electron'
-import { join } from 'node:path'
+import { join,dirname } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { readFileSync, writeFileSync, existsSync, rmSync, mkdirSync, statSync } from 'node:fs'
 import Database from 'better-sqlite3'
@@ -23,6 +25,7 @@ protocol.registerSchemesAsPrivileged([{scheme:'evaprint',privileges:{standard:tr
 const printPages=new Map<string,string>()
 let db:Database.Database
 let shutdownStarted=false,shutdownFinished=false
+let installAfterClose:(()=>Promise<void>)|undefined
 const pendingFileJobs=new Set<Promise<unknown>>()
 function track<T>(promise:Promise<T>):Promise<T>{pendingFileJobs.add(promise);promise.then(()=>pendingFileJobs.delete(promise),()=>pendingFileJobs.delete(promise));return promise}
 if(!app.requestSingleInstanceLock())app.exit(0)
@@ -55,6 +58,39 @@ app.whenReady().then(()=>{
    if(event.sender!==window.webContents)throw new Error('UNTRUSTED_SENDER')
    if(!publicChannels.has(channel))security.assertUnlocked()
    return listener(event,...args)
+  })
+  const updater=new GitHubUpdater({version:app.getVersion(),enabled:app.isPackaged&&process.platform==='win32'&&process.arch==='x64'&&!process.env.PORTABLE_EXECUTABLE_FILE,cacheDir:join(dataDir,'updates')})
+  let updatePromptOpen=false
+  const updateTimer=setTimeout(()=>{if(!shutdownStarted)void updater.check()},30000)
+  const updateInterval=setInterval(()=>{if(!shutdownStarted&&!restoring)void updater.check()},6*60*60*1000)
+  app.once('before-quit',()=>{clearTimeout(updateTimer);clearInterval(updateInterval);updater.cancel()})
+  handle('updates:status',()=>updater.state())
+  handle('updates:check',()=>{if(restoring||shutdownStarted)throw Error('Busy');return updater.check()})
+  handle('updates:download',()=>{if(restoring||shutdownStarted)throw Error('Busy');return track(updater.download())})
+  handle('updates:cancel',()=>updater.cancel())
+  handle('updates:install',async()=>{
+   if(restoring||shutdownStarted||updatePromptOpen||updater.state().phase!=='ready')return false
+   updatePromptOpen=true
+   try{
+    const confirm=await dialog.showMessageBox(window,{type:'question',buttons:['Not now / لاحقًا','Restart and install / إعادة التشغيل والتثبيت'],defaultId:0,cancelId:0,message:'Install the downloaded update? / تثبيت التحديث الذي تم تنزيله؟',detail:'Eva Camp will save a backup, close safely and restart after installation. / سيحفظ البرنامج نسخة احتياطية ثم يغلق بأمان ويُعاد تشغيله بعد التثبيت.'})
+    if(confirm.response!==1)return false
+    security.assertUnlocked()
+    if(restoring||shutdownStarted||updater.state().phase!=='ready')return false
+    restoring=true;window.setEnabled(false);clearInterval(backupTimer)
+    try{
+     await Promise.all([...pendingFileJobs])
+     await updater.installerPath()
+     await createManualBackup(db,join(dataDir,'pre-update-'+Date.now()+'.sqlite'))
+     const checkpoint=db.pragma('wal_checkpoint(TRUNCATE)') as {busy:number}[]
+     if(checkpoint[0]?.busy)throw Error('Database checkpoint is busy')
+     installAfterClose=async()=>{const file=await updater.installerPath();await launchInstaller(file,dirname(app.getPath('exe')))}
+     updater.installing();app.quit();return true
+    }catch(error){
+     if(updater.state().phase!=='error')updater.backupFailed()
+     restoring=false;window.setEnabled(true);backupTimer=setInterval(()=>{void backup()},60*60*1000)
+     throw error
+    }
+   }finally{updatePromptOpen=false}
   })
   handle('security:status',()=>({...security.status(),preferences:repository.getPreferences()}))
   handle('security:unlock',(_event,pin:unknown)=>{security.unlock(pin);return security.status()})
@@ -169,4 +205,5 @@ app.whenReady().then(()=>{
  } catch(error) { dialog.showErrorBox('Eva Camp — startup error',String(error)); app.quit() }
 })
 app.on('window-all-closed',()=>app.quit())
-app.on('before-quit',event=>{if(shutdownFinished)return;event.preventDefault();if(shutdownStarted)return;shutdownStarted=true;Promise.allSettled([...pendingFileJobs]).then(()=>{try{db?.close();shutdownFinished=true;app.quit()}catch(error){shutdownStarted=false;dialog.showErrorBox('Database close failed / تعذر إغلاق قاعدة البيانات',String(error))}})})
+app.on('before-quit',event=>{if(shutdownFinished)return;event.preventDefault();if(shutdownStarted)return;shutdownStarted=true;Promise.allSettled([...pendingFileJobs]).then(async()=>{try{db?.close();if(installAfterClose)await installAfterClose();shutdownFinished=true;app.quit()}catch(error){dialog.showErrorBox('Could not restart / تعذرت إعادة التشغيل',String(error));if(db&&!db.open){shutdownFinished=true;app.relaunch();app.quit()}else{shutdownStarted=false}}})})
+

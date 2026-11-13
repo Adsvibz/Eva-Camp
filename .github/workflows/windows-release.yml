@@ -14,6 +14,11 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - name: Validate release version
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          if ($env:GITHUB_REF_NAME -ne "v$version") { throw 'Tag must match package.json version' }
       - run: npm ci
       - name: Check for high and critical dependency advisories
         run: npm audit --audit-level=high
@@ -24,6 +29,8 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
       - name: Exercise the real Electron reception workflow
         run: npm run test:e2e
+      - name: Exercise in-app update workflow
+        run: node tests/updates.e2e.cjs
       - name: Exercise application lock
         run: node tests/lock.e2e.cjs
       - name: Exercise Windows backup and restore
@@ -39,13 +46,12 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: Eva-Camp-Windows
-          path: dist/*.exe
+          path: dist/evacamp.exe
           if-no-files-found: error
       - name: Create draft release
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $files = @(Get-ChildItem -Path dist -Filter *.exe | ForEach-Object { $_.FullName })
-          if ($files.Count -eq 0) { throw 'No Windows executable found' }
-          gh release create "$env:GITHUB_REF_NAME" @files --draft --title "Eva Camp $env:GITHUB_REF_NAME" --generate-notes
+          if (-not (Test-Path -LiteralPath 'dist/evacamp.exe')) { throw 'Installer was not built' }
+          gh release create "$env:GITHUB_REF_NAME" 'dist/evacamp.exe' --draft --title "Eva Camp $env:GITHUB_REF_NAME" --generate-notes

@@ -89,6 +89,7 @@ async function booking(arrival,departure){
  await workspaceLayout('english-light')
  assert.equal(await app.evaluate(({app})=>app.getAppPath()),root)
  await page.locator('nav').getByRole('button',{name:'Preferences',exact:true}).click()
+ assert.equal((await page.evaluate(()=>window.eva.updateStatus())).phase,'unsupported')
  await page.getByRole('button',{name:'Dark',exact:true}).click()
  await page.waitForFunction(()=>document.documentElement.dataset.theme==='dark')
  assert.equal(await page.getByRole('button',{name:'Dark',exact:true}).getAttribute('aria-pressed'),'true')
