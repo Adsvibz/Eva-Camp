@@ -105,7 +105,7 @@ async function booking(arrival,departure){
  await page.getByRole('button',{name:'Dark',exact:true}).click()
  await page.waitForFunction(()=>document.documentElement.dataset.theme==='dark')
  await closeModal()
- assert.equal(await page.evaluate(async()=>{await document.fonts.ready;return document.fonts.check('14px "Cairo Variable"')}),true)
+ assert.equal(await page.evaluate(async()=>{await document.fonts.load('14px "Cairo Variable"','مريم أحمد');return document.fonts.check('14px "Cairo Variable"','مريم أحمد')}),true)
  await page.locator('nav').getByRole('button',{name:'Units',exact:true}).click()
  for(const unit of ['A','B']){
   await page.getByRole('button',{name:'Add unit',exact:true}).click()
