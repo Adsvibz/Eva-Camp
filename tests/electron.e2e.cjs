@@ -56,6 +56,20 @@ async function workspaceLayout(label){
  }
  await page.setViewportSize(original)
 }
+async function compactDialogLayout(label){
+ const original=await page.evaluate(()=>({width:innerWidth,height:innerHeight}))
+ await page.setViewportSize({width:900,height:650})
+ await page.evaluate(()=>document.fonts.ready)
+ const bounds=await page.locator('.dialog').evaluate(dialog=>{
+  dialog.scrollTop=0
+  const a=dialog.getBoundingClientRect(),b=dialog.querySelector('form > .form-actions .primary').getBoundingClientRect()
+  return {top:a.top,bottom:a.bottom,buttonTop:b.top,buttonBottom:b.bottom,overflow:dialog.scrollWidth>dialog.clientWidth}
+ })
+ assert.ok(bounds.buttonTop>=bounds.top&&bounds.buttonBottom<=bounds.bottom-4,'Compact dialog save button clipped: '+label+' '+JSON.stringify(bounds))
+ assert.equal(bounds.overflow,false,'Compact dialog horizontal overflow: '+label)
+ await page.screenshot({path:path.join(artifacts,'compact-dialog-'+label+'.png'),fullPage:true})
+ await page.setViewportSize(original)
+}
 async function booking(arrival,departure){
  await page.getByRole('button',{name:'New booking',exact:true}).click()
  await page.locator('select[name="unit"]').selectOption({label:'A'})
@@ -106,6 +120,7 @@ async function booking(arrival,departure){
  unitB=(await page.evaluate(()=>window.eva.listUnits())).find(x=>x.name==='B');assert.equal(unitB.housekeepingStatus,'available')
  await page.locator('nav').getByRole('button',{name:'Overview',exact:true}).click()
  await booking(day,'2026-11-14')
+ await compactDialogLayout('booking')
  await fill('name',name);await fill('phone','٠١٢٢٠٧٥٥٧٥٥');await fill('nationality','Egyptian');await fill('idNumber','E2E-PRIMARY')
  await page.getByRole('button',{name:'Add companion',exact:true}).click()
  await fill('companionName0','علي أحمد');await fill('companionId0','E2E-PRIMARY')
@@ -193,6 +208,7 @@ async function booking(arrival,departure){
  // Reception can take a partial payment from booking details without leaving the guest.
  await page.locator('.dialog').getByRole('button',{name:'Record payment',exact:true}).click()
  assert.ok((await page.locator('.payment-context').innerText()).includes(name))
+ await compactDialogLayout('payment-en')
  const paymentBounds=await page.locator('.dialog').evaluate(dialog=>{const a=dialog.getBoundingClientRect(),b=dialog.querySelector('.payment-form .form-actions .primary').getBoundingClientRect();return {dialogTop:a.top,dialogBottom:a.bottom,buttonTop:b.top,buttonBottom:b.bottom}})
  assert.ok(paymentBounds.buttonTop>=paymentBounds.dialogTop&&paymentBounds.buttonBottom<=paymentBounds.dialogBottom,`Payment save button is clipped: ${JSON.stringify(paymentBounds)}`)
  await page.locator('.dialog').screenshot({path:path.join(artifacts,'payment-details-en.png')})
@@ -352,6 +368,7 @@ async function booking(arrival,departure){
  await page.getByRole('button',{name,exact:true}).first().click()
  await page.locator('.dialog').getByRole('button',{name:'تسجيل دفعة',exact:true}).click()
  await page.getByLabel('المبلغ (ج.م)',{exact:true}).waitFor()
+ await compactDialogLayout('payment-ar')
  const paymentBoundsAr=await page.locator('.dialog').evaluate(dialog=>{const a=dialog.getBoundingClientRect(),b=dialog.querySelector('.payment-form .form-actions .primary').getBoundingClientRect();return {dialogTop:a.top,dialogBottom:a.bottom,buttonTop:b.top,buttonBottom:b.bottom}})
  assert.ok(paymentBoundsAr.buttonTop>=paymentBoundsAr.dialogTop&&paymentBoundsAr.buttonBottom<=paymentBoundsAr.dialogBottom,`Arabic payment save button is clipped: ${JSON.stringify(paymentBoundsAr)}`)
  await page.locator('.dialog').screenshot({path:path.join(artifacts,'payment-details-ar.png')})
