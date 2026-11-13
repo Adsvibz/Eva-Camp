@@ -1,47 +1,41 @@
 name: Build Windows release
 on:
   push:
-    tags: ['v*']
     branches: ['release/v0.1.0']
 permissions:
   contents: write
+  actions: read
 jobs:
-  build:
+  publish:
     runs-on: windows-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
         with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - name: Check for high and critical dependency advisories
-        run: npm audit --audit-level=high
-      - run: npm run typecheck
-      - run: npm test
-      - run: npm run dist:win
+          ref: 7aa2c6e0cca97ea40d65eaa3b8d879563b4a1679
+      - name: Verify previously built source and Windows test results
+        shell: pwsh
         env:
-          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-      - name: Exercise the real Electron reception workflow
-        run: npm run test:e2e
-      - name: Exercise application lock
-        run: node tests/lock.e2e.cjs
-      - name: Exercise Windows backup and restore
-        run: node tests/backup.e2e.cjs
-      - name: Upload UI and print verification artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: Eva-Camp-UI-and-print-checks
-          path: test-results/
-          if-no-files-found: ignore
-          retention-days: 14
-      - uses: actions/upload-artifact@v4
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $run = gh api repos/Adsvibz/Eva-Camp/actions/runs/43457667243 | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or $run.head_sha -ne 'c13935c7e2ea60f6d7228aea97f393cab7d3d80e') { throw 'Unexpected build source' }
+          $comparison = gh api repos/Adsvibz/Eva-Camp/compare/7aa2c6e0cca97ea40d65eaa3b8d879563b4a1679...c13935c7e2ea60f6d7228aea97f393cab7d3d80e | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { throw 'Could not verify source equivalence' }
+          if (@($comparison.files | Where-Object { $_.filename -ne '.github/workflows/windows-release.yml' }).Count -ne 0) { throw 'Application source differs from release target' }
+          $jobs = gh api repos/Adsvibz/Eva-Camp/actions/runs/43457667243/jobs | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { throw 'Could not verify test results' }
+          $steps = @($jobs.jobs | Where-Object { $_.name -eq 'build' }).steps
+          foreach ($name in @('Check for high and critical dependency advisories', 'Run npm run typecheck', 'Run npm test', 'Run npm run dist:win', 'Exercise the real Electron reception workflow', 'Exercise application lock', 'Exercise Windows backup and restore', 'Run actions/upload-artifact@v4')) {
+            $step = @($steps | Where-Object { $_.name -eq $name })
+            if ($step.Count -ne 1 -or $step[0].conclusion -ne 'success') { throw "Required check did not pass: $name" }
+          }
+      - uses: actions/download-artifact@v4
         with:
           name: Eva-Camp-Windows
-          path: dist/*.exe
-          if-no-files-found: error
+          path: dist
+          run-id: 43457667243
+          github-token: ${{ github.token }}
       - name: Publish first preview release
         shell: pwsh
         env:
@@ -72,7 +66,7 @@ jobs:
           $notes | Set-Content -Path release-notes.md -Encoding utf8
           gh release view $tag --json id *> $null
           if ($LASTEXITCODE -ne 0) {
-            gh release create $tag --target "$env:GITHUB_SHA" --draft --prerelease --title "Eva Camp $tag - Windows Installer" --notes-file release-notes.md
+            gh release create $tag --target "7aa2c6e0cca97ea40d65eaa3b8d879563b4a1679" --draft --prerelease --title "Eva Camp $tag - Windows Installer" --notes-file release-notes.md
             if ($LASTEXITCODE -ne 0) { throw 'Could not create release' }
           }
           gh release upload $tag dist/evacamp.exe --clobber
