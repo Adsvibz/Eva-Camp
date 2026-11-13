@@ -45,7 +45,7 @@ async function workspaceLayout(label){
  const original=await page.evaluate(()=>({width:innerWidth,height:innerHeight}))
  for(const width of [1440,1024,800]){
   await page.setViewportSize({width,height:900})
-  await page.evaluate(()=>document.fonts.ready)
+  await page.evaluate(()=>{window.scrollTo(0,0);return document.fonts.ready})
   const layout=await page.evaluate(()=>{
    const sidebar=document.querySelector('aside').getBoundingClientRect(),main=document.querySelector('.workspace').getBoundingClientRect()
    return {overflow:document.documentElement.scrollWidth>innerWidth+1,overlap:Math.min(sidebar.right,main.right)-Math.max(sidebar.left,main.left)}
@@ -67,7 +67,7 @@ async function compactDialogLayout(label){
  })
  assert.ok(bounds.buttonTop>=bounds.top&&bounds.buttonBottom<=bounds.bottom-4,'Compact dialog save button clipped: '+label+' '+JSON.stringify(bounds))
  assert.equal(bounds.overflow,false,'Compact dialog horizontal overflow: '+label)
- await page.screenshot({path:path.join(artifacts,'compact-dialog-'+label+'.png'),fullPage:true})
+ await page.screenshot({path:path.join(artifacts,'compact-dialog-'+label+'.png'),fullPage:false})
  await page.setViewportSize(original)
 }
 async function booking(arrival,departure){

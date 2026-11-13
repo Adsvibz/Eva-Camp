@@ -204,7 +204,7 @@ input[readonly] {background:var(--surface-secondary)!important;color:var(--secon
 input[type='checkbox'],input[type='radio'] {accent-color:var(--accent);width:17px;height:17px;flex:none}
 textarea {resize:vertical}
 .form-actions {justify-content:flex-end;margin-top:24px;gap:9px}
-.dialog>form>.form-actions,.payment-form>.form-actions {position:sticky;bottom:0;z-index:3;background:var(--surface);padding:16px 0 24px;border-top:1px solid var(--separator);margin-top:24px}
+.dialog>form>.form-actions,.payment-form>.form-actions {position:sticky;bottom:-28px;z-index:3;background:var(--surface);padding:16px 0 24px;border-top:1px solid var(--separator);margin-top:24px}
 .companions {grid-column:1/-1;border-top:1px solid var(--separator);padding-top:20px}
 .companions h3 {margin:0 0 14px}
 .companion-row {display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:14px}
