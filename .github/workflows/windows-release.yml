@@ -2,6 +2,7 @@ name: Build Windows release
 on:
   push:
     tags: ['v*']
+    branches: ['release/v0.1.0']
 permissions:
   contents: write
 jobs:
@@ -41,11 +42,45 @@ jobs:
           name: Eva-Camp-Windows
           path: dist/*.exe
           if-no-files-found: error
-      - name: Create draft release
+      - name: Publish first preview release
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           $files = @(Get-ChildItem -Path dist -Filter *.exe | ForEach-Object { $_.FullName })
-          if ($files.Count -eq 0) { throw 'No Windows executable found' }
-          gh release create "$env:GITHUB_REF_NAME" @files --draft --title "Eva Camp $env:GITHUB_REF_NAME" --generate-notes
+          if ($files.Count -ne 2) { throw 'Expected installer and portable Windows executables' }
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $tag = "v$version"
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne $tag) { throw 'Tag does not match package version' }
+          $notes = @'
+          ## First Windows preview
+          Eva Camp is an offline reception application for Windows x64.
+
+          ### Downloads
+          - **Eva Camp Setup 0.1.0.exe**: Windows installer.
+          - **Eva Camp 0.1.0.exe**: portable executable.
+          - **SHA256SUMS.txt**: SHA-256 checksums for both executables.
+
+          ### Included
+          - Arabic/English interface, light/dark appearance and refreshed reception workspace.
+          - Guests, companions, identity lookup and stay history.
+          - Units, housekeeping, reservations, arrivals, departures and room transfers.
+          - Payments, refunds, accommodation discounts, extras and booking statements.
+          - Registration forms, drawn signatures and archived declarations.
+          - Reports, daily closing, application PIN, local and password-protected portable backup/restore.
+
+          ### Verification
+          This release is published only after dependency audit, TypeScript checks, unit tests, Windows packaging, Electron reception checks, application-lock tests and same-account backup/restore tests pass.
+
+          ### Preview limitations
+          This is a pre-release for evaluation with synthetic data, not an approved production deployment. Clean Windows 10/11 installation, physical printing and cross-account/cross-PC restore still require manual acceptance testing. Windows executables are not code-signed. See README.md and docs/user-manual-ar.md for details.
+
+          ### العربية
+          أول إصدار تجريبي لويندوز 64 بت. حمّل ملف Setup للتثبيت أو الملف الآخر للتشغيل المحمول. استخدم بيانات تجريبية لحين إتمام اختبار التثبيت والطباعة والاستعادة على جهاز آخر.
+          '@
+          $notes | Set-Content -Path release-notes.md -Encoding utf8
+          $files | ForEach-Object {
+            $hash = Get-FileHash -LiteralPath $_ -Algorithm SHA256
+            "$($hash.Hash.ToLowerInvariant())  $([IO.Path]::GetFileName($_))"
+          } | Set-Content -Path dist/SHA256SUMS.txt -Encoding ascii
+          gh release create $tag @files dist/SHA256SUMS.txt --target "$env:GITHUB_SHA" --prerelease --title "Eva Camp $tag - First Windows Preview" --notes-file release-notes.md
