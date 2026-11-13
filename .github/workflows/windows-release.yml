@@ -47,40 +47,44 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $files = @(Get-ChildItem -Path dist -Filter *.exe | ForEach-Object { $_.FullName })
-          if ($files.Count -ne 2) { throw 'Expected installer and portable Windows executables' }
           $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
           $tag = "v$version"
           if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne $tag) { throw 'Tag does not match package version' }
+          $installer = "dist/Eva Camp Setup $version.exe"
+          if (-not (Test-Path -LiteralPath $installer)) { throw 'Windows installer not found' }
+          Copy-Item -LiteralPath $installer -Destination dist/evacamp.exe
           $notes = @'
-          ## First Windows preview
-          Eva Camp is an offline reception application for Windows x64.
-
-          ### Downloads
-          - **Eva Camp Setup 0.1.0.exe**: Windows installer.
-          - **Eva Camp 0.1.0.exe**: portable executable.
-          - **SHA256SUMS.txt**: SHA-256 checksums for both executables.
+          ## Eva Camp — first Windows preview
+          Download **evacamp.exe** below. This is the Windows x64 installer; no separate application files are required.
 
           ### Included
-          - Arabic/English interface, light/dark appearance and refreshed reception workspace.
-          - Guests, companions, identity lookup and stay history.
-          - Units, housekeeping, reservations, arrivals, departures and room transfers.
-          - Payments, refunds, accommodation discounts, extras and booking statements.
-          - Registration forms, drawn signatures and archived declarations.
-          - Reports, daily closing, application PIN, local and password-protected portable backup/restore.
+          Offline guests, units, bookings, payments/refunds, room transfers, extras/discounts, registration forms, reports, application PIN and backups. Arabic/English interface with saved appearance preferences.
 
           ### Verification
-          This release is published only after dependency audit, TypeScript checks, unit tests, Windows packaging, Electron reception checks, application-lock tests and same-account backup/restore tests pass.
+          Dependency audit, TypeScript checks, unit tests, Windows packaging, Electron reception checks, application-lock tests and same-account backup/restore tests must pass before publication.
 
           ### Preview limitations
-          This is a pre-release for evaluation with synthetic data, not an approved production deployment. Clean Windows 10/11 installation, physical printing and cross-account/cross-PC restore still require manual acceptance testing. Windows executables are not code-signed. See README.md and docs/user-manual-ar.md for details.
+          For evaluation with synthetic data. Clean Windows 10/11 installation, physical printing and cross-account/cross-PC restore still require manual acceptance testing. The installer is not code-signed.
 
           ### العربية
-          أول إصدار تجريبي لويندوز 64 بت. حمّل ملف Setup للتثبيت أو الملف الآخر للتشغيل المحمول. استخدم بيانات تجريبية لحين إتمام اختبار التثبيت والطباعة والاستعادة على جهاز آخر.
+          حمّل evacamp.exe فقط: ملف تثبيت إيفا كامب لويندوز 64 بت، ولا يحتاج ملفات إضافية بجانبه. هذه أول نسخة تجريبية؛ استخدم بيانات وهمية لحين إتمام اختبار التثبيت والطباعة والاستعادة على جهاز آخر.
           '@
           $notes | Set-Content -Path release-notes.md -Encoding utf8
-          $files | ForEach-Object {
-            $hash = Get-FileHash -LiteralPath $_ -Algorithm SHA256
-            "$($hash.Hash.ToLowerInvariant())  $([IO.Path]::GetFileName($_))"
-          } | Set-Content -Path dist/SHA256SUMS.txt -Encoding ascii
-          gh release create $tag @files dist/SHA256SUMS.txt --target "$env:GITHUB_SHA" --prerelease --title "Eva Camp $tag - First Windows Preview" --notes-file release-notes.md
+          gh release view $tag --json id *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $tag --target "$env:GITHUB_SHA" --draft --prerelease --title "Eva Camp $tag - Windows Installer" --notes-file release-notes.md
+            if ($LASTEXITCODE -ne 0) { throw 'Could not create release' }
+          }
+          gh release upload $tag dist/evacamp.exe --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'Installer upload failed' }
+          $assets = (gh release view $tag --json assets | ConvertFrom-Json).assets
+          foreach ($asset in $assets) {
+            if ($asset.name -in @("Eva.Camp.Setup.$version.exe", "Eva.Camp.$version.exe", "Eva Camp Setup $version.exe", "Eva Camp $version.exe", "SHA256SUMS.txt")) {
+              gh release delete-asset $tag $asset.name --yes
+              if ($LASTEXITCODE -ne 0) { throw 'Could not remove superseded release asset' }
+            }
+          }
+          gh release edit $tag --draft=false --prerelease --title "Eva Camp $tag - Windows Installer" --notes-file release-notes.md
+          if ($LASTEXITCODE -ne 0) { throw 'Could not publish release' }
+          $assets = @((gh release view $tag --json assets | ConvertFrom-Json).assets)
+          if ($assets.Count -ne 1 -or $assets[0].name -ne 'evacamp.exe') { throw 'Expected evacamp.exe as the only release asset' }
