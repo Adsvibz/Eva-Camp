@@ -6,7 +6,7 @@ import {undoIdentityConfirmationSchema} from '../shared/contracts'
 import {unitAvailabilitySchema} from '../shared/contracts'
 import {saveDeclarationSchema,undoDeclarationSchema,archivePageSchema} from '../shared/declaration'
 import { app, BrowserWindow, ipcMain, dialog, safeStorage, Menu, protocol } from 'electron'
-import { join,dirname } from 'node:path'
+import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { readFileSync, writeFileSync, existsSync, rmSync, mkdirSync, statSync } from 'node:fs'
 import Database from 'better-sqlite3'
@@ -77,19 +77,25 @@ app.whenReady().then(()=>{
     security.assertUnlocked()
     if(restoring||shutdownStarted||updater.state().phase!=='ready')return false
     restoring=true;window.setEnabled(false);clearInterval(backupTimer)
-    try{
-     await Promise.all([...pendingFileJobs])
-     await updater.installerPath()
-     await createManualBackup(db,join(dataDir,'pre-update-'+Date.now()+'.sqlite'))
-     const checkpoint=db.pragma('wal_checkpoint(TRUNCATE)') as {busy:number}[]
-     if(checkpoint[0]?.busy)throw Error('Database checkpoint is busy')
-     installAfterClose=async()=>{const file=await updater.installerPath();await launchInstaller(file,dirname(app.getPath('exe')))}
-     updater.installing();app.quit();return true
-    }catch(error){
-     if(updater.state().phase!=='error')updater.backupFailed()
-     restoring=false;window.setEnabled(true);backupTimer=setInterval(()=>{void backup()},60*60*1000)
-     throw error
-    }
+    const existingJobs=[...pendingFileJobs]
+    return await track((async()=>{
+     try{
+      await Promise.all(existingJobs)
+      await updater.installerPath()
+      if(shutdownStarted)return false
+      await createManualBackup(db,join(dataDir,'pre-update-'+Date.now()+'.sqlite'))
+      if(shutdownStarted)return false
+      const checkpoint=db.pragma('wal_checkpoint(TRUNCATE)') as {busy:number}[]
+      if(checkpoint[0]?.busy)throw Error('Database checkpoint is busy')
+      installAfterClose=async()=>{const file=await updater.installerPath();await launchInstaller(file)}
+      updater.installing();app.quit();return true
+     }catch(error){
+      if(updater.state().phase!=='error')updater.backupFailed()
+      restoring=false
+      if(!shutdownStarted){if(!window.isDestroyed())window.setEnabled(true);backupTimer=setInterval(()=>{void backup()},60*60*1000)}
+      throw error
+     }
+    })())
    }finally{updatePromptOpen=false}
   })
   handle('security:status',()=>({...security.status(),preferences:repository.getPreferences()}))

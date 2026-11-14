@@ -65,6 +65,6 @@ it('unsupported builds make no network requests and cannot install',async()=>{
  const u=new GitHubUpdater({version:'0.2.0',enabled:false,cacheDir:'unused',fetcher:(async()=>{throw Error('Must not fetch')}) as typeof fetch})
  await u.check();await u.download();assert.equal(u.state().phase,'unsupported');await assert.rejects(u.installerPath(),/not-ready/)
 })
-it('uses NSIS update and relaunch arguments, preserving the installation directory',()=>{
- assert.deepEqual(installerArguments('C:\\Apps\\Eva Camp'),['--updated','/S','--force-run','/D=C:\\Apps\\Eva Camp'])
+it('uses NSIS update and relaunch arguments, without overriding the registered installation directory',()=>{
+ assert.deepEqual(installerArguments(),['--updated','/S','--force-run'])
 })

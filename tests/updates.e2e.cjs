@@ -35,7 +35,7 @@ let app
  assert.equal(record.closedLive,true,'Database must be closed before installer launch')
  assert.equal(record.backups.length,1,'A pre-update backup must exist')
  assert.deepEqual(record.args.slice(0,3),['--updated','/S','--force-run'])
- assert.ok(record.args[3].startsWith('/D='))
+ assert.equal(record.args.length,3)
  assert.equal(record.options.detached,true)
  console.log('PASS: in-app offline recovery, GitHub release detection, verified real installer download, English/Arabic update UI, install cancellation, pre-update backup, database closure before installer handoff.')
 })().catch(error=>{console.error(error);process.exitCode=1}).finally(async()=>{if(app)await app.close().catch(()=>{});fs.rmSync(data,{recursive:true,force:true,maxRetries:3,retryDelay:200})})

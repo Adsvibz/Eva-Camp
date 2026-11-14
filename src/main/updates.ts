@@ -64,7 +64,7 @@ async function verify(file:string,candidate:Candidate){
  for await(const chunk of createReadStream(file)){const bytes=Buffer.from(chunk);size+=bytes.length;if(size>candidate.size)throw Error('integrity');if(first.length<2)first=Buffer.concat([first,bytes]).subarray(0,2);hash.update(bytes)}
  if(size!==candidate.size||first.toString('ascii')!=='MZ'||hash.digest('hex')!==candidate.sha256)throw Error('integrity')
 }
-export function installerArguments(directory:string){return ['--updated','/S','--force-run','/D='+directory]}
+export function installerArguments(){return ['--updated','/S','--force-run']}
 export class GitHubUpdater {
  private value:UpdateState
  private candidate:Candidate|null=null
