@@ -41,6 +41,35 @@ async function preview(action,filename,text,minimumPages=1){
  await window.screenshot({path:path.join(artifacts,filename+'.png'),fullPage:true})
  await app.evaluate(({BrowserWindow},url)=>BrowserWindow.getAllWindows().find(w=>w.webContents.getURL()===url)?.close(),url)
 }
+async function workspaceLayout(label){
+ const original=await page.evaluate(()=>({width:innerWidth,height:innerHeight}))
+ for(const width of [1440,1024,800]){
+  await page.setViewportSize({width,height:900})
+  await page.evaluate(()=>{window.scrollTo(0,0);return document.fonts.ready})
+  const layout=await page.evaluate(()=>{
+   const sidebar=document.querySelector('aside').getBoundingClientRect(),main=document.querySelector('.workspace').getBoundingClientRect()
+   return {overflow:document.documentElement.scrollWidth>innerWidth+1,overlap:Math.min(sidebar.right,main.right)-Math.max(sidebar.left,main.left)}
+  })
+  assert.equal(layout.overflow,false,'Workspace horizontal overflow: '+label+' at '+width)
+  assert.ok(layout.overlap<=1,'Sidebar overlaps content: '+label+' at '+width)
+  if(width===1440||width===800)await page.screenshot({path:path.join(artifacts,'workspace-'+label+'-'+width+'.png'),fullPage:true})
+ }
+ await page.setViewportSize(original)
+}
+async function compactDialogLayout(label){
+ const original=await page.evaluate(()=>({width:innerWidth,height:innerHeight}))
+ await page.setViewportSize({width:900,height:650})
+ await page.evaluate(()=>document.fonts.ready)
+ const bounds=await page.locator('.dialog').evaluate(dialog=>{
+  dialog.scrollTop=0
+  const a=dialog.getBoundingClientRect(),b=dialog.querySelector('form > .form-actions .primary').getBoundingClientRect()
+  return {top:a.top,bottom:a.bottom,buttonTop:b.top,buttonBottom:b.bottom,overflow:dialog.scrollWidth>dialog.clientWidth}
+ })
+ assert.ok(bounds.buttonTop>=bounds.top&&bounds.buttonBottom<=bounds.bottom-4,'Compact dialog save button clipped: '+label+' '+JSON.stringify(bounds))
+ assert.equal(bounds.overflow,false,'Compact dialog horizontal overflow: '+label)
+ await page.screenshot({path:path.join(artifacts,'compact-dialog-'+label+'.png'),fullPage:false})
+ await page.setViewportSize(original)
+}
 async function booking(arrival,departure){
  await page.getByRole('button',{name:'New booking',exact:true}).click()
  await page.locator('select[name="unit"]').selectOption({label:'A'})
@@ -57,13 +86,15 @@ async function booking(arrival,departure){
  await page.getByRole('heading',{name:'Front desk today'}).waitFor()
  assert.equal(await page.locator('aside').getByText('+20 122 075 5755',{exact:true}).count(),0)
  assert.equal((await page.evaluate(day=>window.eva.dashboard(day),day)).totalUnits,0)
+ await workspaceLayout('english-light')
  assert.equal(await app.evaluate(({app})=>app.getAppPath()),root)
  await page.locator('nav').getByRole('button',{name:'Preferences',exact:true}).click()
+ assert.equal((await page.evaluate(()=>window.eva.updateStatus())).phase,'unsupported')
  await page.getByRole('button',{name:'Dark',exact:true}).click()
  await page.waitForFunction(()=>document.documentElement.dataset.theme==='dark')
  assert.equal(await page.getByRole('button',{name:'Dark',exact:true}).getAttribute('aria-pressed'),'true')
  assert.deepEqual(await page.evaluate(()=>window.eva.getPreferences()),{language:'en',theme:'dark'})
- assert.equal(await page.locator('.dialog').evaluate(e=>getComputedStyle(e).backgroundColor),'rgb(36, 42, 37)')
+ assert.equal(await page.locator('.dialog').evaluate(e=>getComputedStyle(e).backgroundColor),'rgb(38, 38, 41)')
  await page.screenshot({path:path.join(artifacts,'preferences-dark.png'),fullPage:true})
  await page.emulateMedia({colorScheme:'light'})
  await page.getByRole('button',{name:'System',exact:true}).click()
@@ -75,7 +106,7 @@ async function booking(arrival,departure){
  await page.getByRole('button',{name:'Dark',exact:true}).click()
  await page.waitForFunction(()=>document.documentElement.dataset.theme==='dark')
  await closeModal()
- assert.equal(await page.evaluate(async()=>{await document.fonts.ready;return document.fonts.check('14px "Cairo Variable"')}),true)
+ assert.equal(await page.evaluate(async()=>{await document.fonts.load('14px "Cairo Variable"','مريم أحمد');return document.fonts.check('14px "Cairo Variable"','مريم أحمد')}),true)
  await page.locator('nav').getByRole('button',{name:'Units',exact:true}).click()
  for(const unit of ['A','B']){
   await page.getByRole('button',{name:'Add unit',exact:true}).click()
@@ -90,6 +121,7 @@ async function booking(arrival,departure){
  unitB=(await page.evaluate(()=>window.eva.listUnits())).find(x=>x.name==='B');assert.equal(unitB.housekeepingStatus,'available')
  await page.locator('nav').getByRole('button',{name:'Overview',exact:true}).click()
  await booking(day,'2026-11-14')
+ await compactDialogLayout('booking')
  await fill('name',name);await fill('phone','٠١٢٢٠٧٥٥٧٥٥');await fill('nationality','Egyptian');await fill('idNumber','E2E-PRIMARY')
  await page.getByRole('button',{name:'Add companion',exact:true}).click()
  await fill('companionName0','علي أحمد');await fill('companionId0','E2E-PRIMARY')
@@ -172,10 +204,12 @@ async function booking(arrival,departure){
  assert.equal(dashboard.occupiedUnits,1);assert.equal(dashboard.inHouseGuests,1);assert.equal(dashboard.todayCollectionsPiasters,25000);assert.equal(dashboard.arrivalsCount,1)
  await page.getByRole('heading',{name:'Front desk today'}).waitFor()
  await page.screenshot({path:path.join(artifacts,'dashboard.png'),fullPage:true})
+ await workspaceLayout('english-dark')
  await page.getByRole('button',{name,exact:true}).click()
  // Reception can take a partial payment from booking details without leaving the guest.
  await page.locator('.dialog').getByRole('button',{name:'Record payment',exact:true}).click()
  assert.ok((await page.locator('.payment-context').innerText()).includes(name))
+ await compactDialogLayout('payment-en')
  const paymentBounds=await page.locator('.dialog').evaluate(dialog=>{const a=dialog.getBoundingClientRect(),b=dialog.querySelector('.payment-form .form-actions .primary').getBoundingClientRect();return {dialogTop:a.top,dialogBottom:a.bottom,buttonTop:b.top,buttonBottom:b.bottom}})
  assert.ok(paymentBounds.buttonTop>=paymentBounds.dialogTop&&paymentBounds.buttonBottom<=paymentBounds.dialogBottom,`Payment save button is clipped: ${JSON.stringify(paymentBounds)}`)
  await page.locator('.dialog').screenshot({path:path.join(artifacts,'payment-details-en.png')})
@@ -318,6 +352,7 @@ async function booking(arrival,departure){
  await page.getByRole('button',{name:'العربية',exact:true}).click()
  await page.waitForFunction(()=>document.documentElement.lang==='ar')
  assert.equal(await page.locator('.app').getAttribute('dir'),'rtl')
+ await workspaceLayout('arabic-dark')
  assert.equal(await page.locator('aside').getByText('+20 122 075 5755',{exact:true}).count(),0)
  await page.keyboard.press('Control+k')
  await page.locator('.primary-stay-search summary').click()
@@ -334,6 +369,7 @@ async function booking(arrival,departure){
  await page.getByRole('button',{name,exact:true}).first().click()
  await page.locator('.dialog').getByRole('button',{name:'تسجيل دفعة',exact:true}).click()
  await page.getByLabel('المبلغ (ج.م)',{exact:true}).waitFor()
+ await compactDialogLayout('payment-ar')
  const paymentBoundsAr=await page.locator('.dialog').evaluate(dialog=>{const a=dialog.getBoundingClientRect(),b=dialog.querySelector('.payment-form .form-actions .primary').getBoundingClientRect();return {dialogTop:a.top,dialogBottom:a.bottom,buttonTop:b.top,buttonBottom:b.bottom}})
  assert.ok(paymentBoundsAr.buttonTop>=paymentBoundsAr.dialogTop&&paymentBoundsAr.buttonBottom<=paymentBoundsAr.dialogBottom,`Arabic payment save button is clipped: ${JSON.stringify(paymentBoundsAr)}`)
  await page.locator('.dialog').screenshot({path:path.join(artifacts,'payment-details-ar.png')})
@@ -410,3 +446,4 @@ async function booking(arrival,departure){
  fs.rmSync(data,{recursive:true,force:true,maxRetries:3,retryDelay:200})
  fs.rmSync(packagedData,{recursive:true,force:true,maxRetries:3,retryDelay:200})
 })
+

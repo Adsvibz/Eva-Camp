@@ -21,12 +21,14 @@ jobs:
         run: npm audit --audit-level=high
       - run: npm run typecheck
       - run: npm test
-      - name: Build Windows installer and portable app
+      - name: Build Windows installer
         run: npm run dist:win
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
       - name: Exercise the real Electron reception workflow
         run: npm run test:e2e
+      - name: Exercise in-app update workflow
+        run: node tests/updates.e2e.cjs
       - name: Exercise application lock
         run: node tests/lock.e2e.cjs
       - name: Exercise Windows backup and restore
@@ -42,6 +44,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: Eva-Camp-Windows-development-build
-          path: dist/*.exe
+          path: dist/evacamp.exe
           if-no-files-found: error
           retention-days: 14
+

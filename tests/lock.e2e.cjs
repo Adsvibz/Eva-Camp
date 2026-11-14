@@ -9,6 +9,7 @@ async function preferences(){await page.locator('nav').getByRole('button',{name:
  await launch();await page.getByRole('button',{name:'New booking',exact:true}).waitFor();await preferences()
  await page.getByRole('button',{name:'Enable PIN',exact:true}).click();await page.getByLabel('New PIN',{exact:true}).fill('123456');await page.getByLabel('Confirm new PIN',{exact:true}).fill('123456');await page.getByRole('button',{name:'Save PIN',exact:true}).click();await page.getByText('PIN saved.',{exact:true}).waitFor()
  await page.getByRole('button',{name:'Lock now',exact:true}).click();await page.getByRole('heading',{name:'Eva Camp is locked',exact:true}).waitFor()
+ const updateBlocked=await page.evaluate(async()=>{try{await window.eva.installUpdate();return false}catch(e){return String(e).includes('APP_LOCKED')}});assert.equal(updateBlocked,true)
  const blocked=await page.evaluate(async()=>{try{await window.eva.listUnits();return false}catch(e){return String(e).includes('APP_LOCKED')}});assert.equal(blocked,true)
  const discountBlocked=await page.evaluate(async()=>{try{await window.eva.setDiscount({bookingId:1,discountPiasters:100,expectedDiscountPiasters:0});return false}catch(e){return String(e).includes('APP_LOCKED')}});assert.equal(discountBlocked,true)
  const declarationBlocked=await page.evaluate(async()=>{try{await window.eva.getDeclaration(1);return false}catch(e){return String(e).includes('APP_LOCKED')}});assert.equal(declarationBlocked,true)
@@ -23,3 +24,4 @@ async function preferences(){await page.locator('nav').getByRole('button',{name:
  await app.close();app=null;await launch();await page.getByRole('button',{name:'New booking',exact:true}).waitFor();assert.equal((await page.evaluate(()=>window.eva.lockStatus())).enabled,false)
  console.log('PASS: PIN setup, main-process data access denial, wrong PIN, restart lock, unlock, removal and restart without PIN.')
 })().catch(error=>{console.error(error);process.exitCode=1}).finally(async()=>{if(app)await app.close().catch(()=>{});fs.rmSync(data,{recursive:true,force:true,maxRetries:3,retryDelay:200})})
+

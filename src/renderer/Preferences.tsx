@@ -1,3 +1,4 @@
+import {UpdateSettings} from './Updates'
 import React from 'react'
 import {SecuritySettings} from './Security'
 import {Languages,Monitor,Moon,Sun} from 'lucide-react'
@@ -16,7 +17,9 @@ export function Preferences({value,busy,disabled,error,onRetry,onChange,onLock}:
   <div className="preference-group"><div className="preference-heading"><span className="preference-icon"><Languages size={17}/></span><div><h3>{t.language}</h3><p>{t.languageHint}</p></div></div><div className="preference-choices preference-languages" role="group" aria-label={t.language}>
    {([['en',t.english],['ar',t.arabic]] as const).map(([key,label])=><button key={key} type="button" className="preference-choice" aria-pressed={value.language===key} disabled={disabled} onClick={()=>onChange({language:key})}>{label}</button>)}
   </div></div>
+  <UpdateSettings lang={value.language}/>
   <SecuritySettings lang={value.language} onLock={onLock}/>
   {error?<div className="error" role="alert">{error==='load'?t.loadError:t.saveError}{error==='load'&&<button type="button" className="language" disabled={busy} onClick={onRetry}>{t.retry}</button>}</div>:<p className="preferences-saved" role="status">{busy?t.busy:t.saved}</p>}
  </section>
 }
+
